@@ -1,0 +1,38 @@
+# Archivos y carpetas de Python
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+*.so
+*.egg
+*.egg-info/
+dist/
+build/
+
+# Archivos de entorno
+.env
+
+# Archivos de base de datos (si usas SQLite en desarrollo)
+db.sqlite3
+
+# Archivos de logs
+*.log
+
+# Archivos de compilación y caches de VSCode
+.vscode/
+*.DS_Store
+
+# Migraciones (opcional: si quieres que otros desarrolladores generen sus propias)
+# inventory_app/migrations/
+
+# Archivos estáticos generados
+staticfiles/
+media/
+
+# Archivos de dependencias (instalados por pip)
+venv/
+.venv/
+
+# Archivos de sistema (Windows, macOS)
+Thumbs.db
+.DS_Store
