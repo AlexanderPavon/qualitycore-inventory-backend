@@ -17,11 +17,11 @@ class LoginView(APIView):
         user = authenticate(request, username=email, password=password)
         if user:
             if not user.is_active:
-                return Response({'message': 'Inactive user. Contact admin.'}, status=status.HTTP_403_FORBIDDEN)
+                return Response({'message': 'El usuario está inactivo. Contacta al administrador.'}, status=status.HTTP_403_FORBIDDEN)
             login(request, user)
             serializer = UserSerializer(user)
-            return Response({'message': 'Login successful', 'user': serializer.data})
-        return Response({'message': 'Incorrect credentials'}, status=status.HTTP_401_UNAUTHORIZED)
+            return Response({'message': 'Inicio de sesión exitoso', 'user': serializer.data})
+        return Response({'message': 'Credenciales incorrectas'}, status=status.HTTP_401_UNAUTHORIZED)
 
 # --- Forgot Password ---
 class ForgotPasswordView(APIView):
@@ -31,23 +31,27 @@ class ForgotPasswordView(APIView):
             user = User.objects.get(email=email)
             token = default_token_generator.make_token(user)
             uid = user.pk
-            frontend_url = 'http://localhost:3000/reset-password'
+            frontend_url = 'https://qualitycore-inventory-frontend-r1a81m58r.vercel.app/reset-password'
             reset_url = f"{frontend_url}?uid={uid}&token={token}"
 
             send_mail(
-                subject="Reset your password",
+                subject="Recupera tu contraseña",
                 message=(
-                    f"Hi,\n\nWe received a request to reset your password.\n"
-                    f"Link: {reset_url}\n\n"
-                    f"If you didn't request this, ignore this message."
+                    f"Hola,\n\n"
+                    f"Hemos recibido una solicitud para restablecer la contraseña de tu cuenta en QualityCore Services.\n\n"
+                    f"Para crear una nueva contraseña, haz clic en el siguiente enlace o cópialo y pégalo en tu navegador:\n"
+                    f"{reset_url}\n\n"
+                    f"Si tú no solicitaste este cambio, puedes ignorar este correo y tu contraseña actual seguirá siendo válida. Si tienes alguna duda o detectas actividad sospechosa, por favor comunícate con la administradora.\n\n"
+                    f"Gracias por confiar en nosotros.\n"
+                    f"Equipo de QualityCore Services"
                 ),
                 from_email=None,
                 recipient_list=[user.email],
                 fail_silently=False,
             )
-            return Response({'message': f"A password recovery email has been sent to {email}."})
+            return Response({'message': f"Se ha enviado un correo electrónico de recuperación de contraseña a {email}."})
         except User.DoesNotExist:
-            return Response({'message': 'No user with that email found.'}, status=status.HTTP_400_BAD_REQUEST)
+            return Response({'message': 'No se encontró un usuario con ese correo electrónico.'}, status=status.HTTP_400_BAD_REQUEST)
 
 # --- Reset Password ---
 class ResetPasswordView(APIView):
@@ -60,11 +64,11 @@ class ResetPasswordView(APIView):
             if default_token_generator.check_token(user, token):
                 user.set_password(new_password)
                 user.save()
-                return Response({'message': 'Password successfully updated'})
+                return Response({'message': 'Contraseña actualizada correctamente'})
             else:
-                return Response({'message': 'Invalid or expired token'}, status=status.HTTP_400_BAD_REQUEST)
+                return Response({'message': 'El token es inválido o ha expirado'}, status=status.HTTP_400_BAD_REQUEST)
         except User.DoesNotExist:
-            return Response({'message': 'User not found'}, status=status.HTTP_400_BAD_REQUEST)
+            return Response({'message': 'Usuario no encontrado'}, status=status.HTTP_400_BAD_REQUEST)
 
 # --- Admin Rol Check ---
 class IsAdmin(BasePermission):
@@ -83,4 +87,4 @@ class ChangePasswordView(APIView):
             return Response({'error': 'Current password is incorrect.'}, status=status.HTTP_400_BAD_REQUEST)
         user.set_password(new_password)
         user.save()
-        return Response({'message': 'Password changed successfully'}, status=status.HTTP_200_OK)
+        return Response({'message': 'Contraseña cambiada exitosamente'}, status=status.HTTP_200_OK)
