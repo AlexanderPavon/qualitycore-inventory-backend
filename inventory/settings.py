@@ -119,14 +119,14 @@ DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
 # --- CORS (for React frontend) ---
 CORS_ALLOWED_ORIGINS = [
     "http://localhost:3000",
-    "https://qualitycore-inventory-frontend-5gxfbwt92.vercel.app",
+    "https://qualitycore-inventory-frontend.vercel.app",
 ]
 CORS_ALLOW_CREDENTIALS = True
 
 # --- CSRF (for secure POST requests) ---
 CSRF_TRUSTED_ORIGINS = [
     "http://localhost:3000",
-    "https://qualitycore-inventory-frontend-5gxfbwt92.vercel.app",
+    "https://qualitycore-inventory-frontend.vercel.app",
 ]
 
 
