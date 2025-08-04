@@ -21,4 +21,4 @@ ENV DJANGO_SETTINGS_MODULE=inventory.settings
 EXPOSE 8000
 
 # ✅ Comando para correr el servidor en producción con Gunicorn
-CMD ["gunicorn", "inventario.wsgi:application", "--bind", "0.0.0.0:8000"]
+CMD ["gunicorn", "inventory.wsgi:application", "--bind", "0.0.0.0:8000"]
