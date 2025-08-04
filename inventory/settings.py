@@ -119,10 +119,22 @@ DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
 # --- CORS (for React frontend) ---
 CORS_ALLOWED_ORIGINS = [
     "http://localhost:3000",
+    "https://qualitycore-inventory-frontend-r1a81m58r.vercel.app/",
 ]
 CORS_ALLOW_CREDENTIALS = True
 
 # --- CSRF (for secure POST requests) ---
 CSRF_TRUSTED_ORIGINS = [
     "http://localhost:3000",
+    "https://qualitycore-inventory-frontend-r1a81m58r.vercel.app/",
 ]
+
+
+# --- Cookies seguras para sesiones y CSRF
+SESSION_COOKIE_SAMESITE = "None"
+SESSION_COOKIE_SECURE = True
+CSRF_COOKIE_SAMESITE = "None"
+CSRF_COOKIE_SECURE = True
+
+# --- Permitir cookies (credentials) entre dominios
+CORS_ALLOW_CREDENTIALS = True
