@@ -31,9 +31,8 @@ class ForgotPasswordView(APIView):
             user = User.objects.get(email=email)
             token = default_token_generator.make_token(user)
             uid = user.pk
-            frontend_url = 'https://qualitycore-inventory-frontend-r1a81m58r.vercel.app/reset-password'
+            frontend_url = 'https://qualitycore-inventory-frontend-5gxfbwt92.vercel.app/reset-password'
             reset_url = f"{frontend_url}?uid={uid}&token={token}"
-
             send_mail(
                 subject="Recupera tu contraseña",
                 message=(
