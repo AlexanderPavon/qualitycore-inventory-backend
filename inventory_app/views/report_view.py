@@ -150,5 +150,5 @@ class ReportGeneratePDFView(APIView):
 
         return Response({
             "message": "Reporte generado correctamente",
-            "url": f"{settings.MEDIA_URL}{report.file}"
+            "url": reverse("report-download", args=[report.id]) 
         })
