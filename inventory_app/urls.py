@@ -9,7 +9,7 @@ from inventory_app.views.supplier_view import SupplierListCreateView, SupplierDe
 from inventory_app.views.product_view import ProductListCreateView, ProductDetailView
 from inventory_app.views.category_view import CategoryListCreateView, CategoryDetailView
 from inventory_app.views.movement_view import MovementListCreateView
-from inventory_app.views.report_view import ReportListView, ReportGeneratePDFView
+from inventory_app.views.report_view import ReportListView, ReportGeneratePDFView, ReportDownloadView
 from inventory_app.views.dashboard_view import DashboardSummaryView
 
 from inventory_app.views.quotation_view import (
@@ -53,7 +53,7 @@ urlpatterns = [
     # Reports
     path('reports/', ReportListView.as_view()),
     path('reports/generate/', ReportGeneratePDFView.as_view()),
-
+    path('reports/download/<int:pk>/', ReportDownloadView.as_view(), name='report-download'),
 
     # Quotations
     path('quotations/', QuotationListView.as_view()),

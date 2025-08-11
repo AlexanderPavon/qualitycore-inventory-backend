@@ -13,8 +13,28 @@ from reportlab.platypus import SimpleDocTemplate, Table, TableStyle, Paragraph, 
 from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
 from reportlab.lib import colors
 from django.db.models import Sum
+from django.urls import reverse
+from django.http import FileResponse, Http404
+from django.shortcuts import get_object_or_404
+from pathlib import Path
 import os
 
+class ReportDownloadView(APIView):
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request, pk):
+        report = get_object_or_404(Report, pk=pk)
+        # opcional: limitar al dueño o admin
+        # if report.user != request.user and getattr(request.user, "role", "") != "Administrator":
+        #     return Response(status=status.HTTP_403_FORBIDDEN)
+
+        file_path = Path(settings.MEDIA_ROOT) / report.file.name  # e.g. reports/xxxx.pdf
+        if not file_path.exists():
+            raise Http404("Archivo no encontrado")
+
+        resp = FileResponse(open(file_path, "rb"), content_type="application/pdf")
+        resp["Content-Disposition"] = f'inline; filename="{file_path.name}"'
+        return resp
 
 class ReportListView(generics.ListAPIView):
     serializer_class = ReportSerializer
