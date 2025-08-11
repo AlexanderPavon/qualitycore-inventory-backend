@@ -140,3 +140,4 @@ CSRF_COOKIE_SECURE = True
 
 # --- Permitir cookies (credentials) entre dominios
 CORS_ALLOW_CREDENTIALS = True
+
