@@ -18,6 +18,8 @@ from inventory_app.views.quotation_view import (
 
 from inventory_app.views.alert_view import AlertListView, AlertUpdateView
 
+
+from inventory_app.views.csrf_view import csrf_ready
 urlpatterns = [
     # Auth
     path('login/', LoginView.as_view()),
@@ -66,4 +68,8 @@ urlpatterns = [
 
     # Dashboard
     path('dashboard/summary/', DashboardSummaryView.as_view()),
+
+
+    path('csrf/', csrf_ready),
+
 ]
