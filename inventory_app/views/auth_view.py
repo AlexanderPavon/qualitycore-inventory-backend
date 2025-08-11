@@ -69,11 +69,6 @@ class ResetPasswordView(APIView):
         except User.DoesNotExist:
             return Response({'message': 'Usuario no encontrado'}, status=status.HTTP_400_BAD_REQUEST)
 
-# --- Admin Rol Check ---
-class IsAdmin(BasePermission):
-    def has_permission(self, request, view):
-        return request.user and request.user.is_authenticated and request.user.rol == "Administrador"
-
 # --- Change Password ---
 class ChangePasswordView(APIView):
     permission_classes = [permissions.IsAuthenticated]
