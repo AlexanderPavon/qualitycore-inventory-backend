@@ -48,7 +48,7 @@ class QuotationListView(generics.ListAPIView):
 
     def get_queryset(self):
         user = self.request.user
-        if user.rol == "Administrador":
+        if user.rol == "Administrator":
             return Quotation.objects.filter(deleted_at__isnull=True).order_by('-date')
         else:
             return Quotation.objects.filter(user=user, deleted_at__isnull=True).order_by('-date')
