@@ -14,6 +14,7 @@ from reportlab.platypus import SimpleDocTemplate, Table, TableStyle, Paragraph, 
 from reportlab.lib import colors
 from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
 from django.conf import settings
+from django.http import FileResponse, Http404  # 👈 nuevos imports
 
 class QuotationCreateView(APIView):
     permission_classes = [IsAuthenticated]
@@ -64,13 +65,16 @@ class QuotationPDFView(APIView):
         try:
             quotation = Quotation.objects.get(id=quotation_id, deleted_at__isnull=True)
         except Quotation.DoesNotExist:
-            return Response({"message": "Cotización no encontrada"}, status=status.HTTP_404_NOT_FOUND)
+            raise Http404("Cotización no encontrada")
 
+        # ruta destino del PDF
         now = datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
         filename = f"cotizacion_{quotation.id}_{now}.pdf"
-        filepath = os.path.join(settings.MEDIA_ROOT, 'reports', filename)
-        os.makedirs(os.path.dirname(filepath), exist_ok=True)
+        out_dir = os.path.join(settings.MEDIA_ROOT, "reports")
+        os.makedirs(out_dir, exist_ok=True)
+        filepath = os.path.join(out_dir, filename)
 
+        # --- generar PDF (tu mismo código, SOLO cambia que el destino es `filepath`) ---
         doc = SimpleDocTemplate(filepath, pagesize=letter)
         styles = getSampleStyleSheet()
         styles.add(ParagraphStyle(name='HeaderTitle', fontSize=22, alignment=1, spaceAfter=14))
@@ -119,7 +123,8 @@ class QuotationPDFView(APIView):
         elements.append(Paragraph(f"<b>IVA (15%):</b> ${quotation.tax:.2f}", styles["Totales"]))
         elements.append(Paragraph(f"<b>Total:</b> <b>${quotation.total:.2f}</b>", styles["TotalBold"]))
 
-        if quotation.notes:
+        # OJO: si tu modelo usa 'observations' en lugar de 'notes', cámbialo aquí
+        if getattr(quotation, "notes", None):
             elements.append(Spacer(1, 12))
             elements.append(Paragraph("<b>OBSERVACIONES:</b>", styles["Normal"]))
             elements.append(Spacer(1, 4))
@@ -129,13 +134,13 @@ class QuotationPDFView(APIView):
         elements.append(Paragraph("<i>⚠ Cotización válida por 30 días</i>", styles["Normal"]))
 
         doc.build(elements)
+        # --- fin generación PDF ---
 
-        report = Report.objects.create(
-            file=f"reports/{filename}",
-            user=request.user
-        )
+        # opcional: registra el reporte en BD
+        Report.objects.create(file=f"reports/{filename}", user=request.user)
 
-        return Response({
-            "message": "PDF generado exitosamente",
-            "url": f"{settings.MEDIA_URL}{report.file}"
-        })
+        # 👉 DEVUELVE EL PDF, no JSON
+        return FileResponse(open(filepath, "rb"),
+                           content_type="application/pdf",
+                           as_attachment=False,     # True si quieres forzar descarga
+                           filename=filename)
