@@ -143,4 +143,7 @@ CORS_ALLOW_CREDENTIALS = True
 
 # --- Security / Proxy ---
 SECURE_PROXY_SSL_HEADER = ('HTTP_X_FORWARDED_PROTO', 'https')
-USE_X_FORWARDED_HOST = True  # opcional, útil si confías en el host que pasa Railway
+USE_X_FORWARDED_HOST = True  
+
+# DB pool
+DATABASES['default']['CONN_MAX_AGE'] = 60
