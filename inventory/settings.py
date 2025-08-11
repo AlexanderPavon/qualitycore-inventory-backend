@@ -26,7 +26,8 @@ INSTALLED_APPS = [
     'corsheaders',
 
     # App propia
-    'inventory_app',
+    #'inventory_app',
+    'inventory_app.apps.InventoryAppConfig',
 ]
 
 # --- Custom user model ---
@@ -122,7 +123,6 @@ CORS_ALLOWED_ORIGINS = [
     "https://qualitycore-inventory-frontend.vercel.app",
     "https://qualitycore-inventory-frontend-production.up.railway.app",
 ]
-CORS_ALLOW_CREDENTIALS = True
 
 # --- CSRF (for secure POST requests) ---
 CSRF_TRUSTED_ORIGINS = [
@@ -141,3 +141,6 @@ CSRF_COOKIE_SECURE = True
 # --- Permitir cookies (credentials) entre dominios
 CORS_ALLOW_CREDENTIALS = True
 
+# --- Security / Proxy ---
+SECURE_PROXY_SSL_HEADER = ('HTTP_X_FORWARDED_PROTO', 'https')
+USE_X_FORWARDED_HOST = True  # opcional, útil si confías en el host que pasa Railway
