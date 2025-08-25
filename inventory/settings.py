@@ -147,21 +147,27 @@ DATABASES['default']['CONN_MAX_AGE'] = 60
 
 # --- Cloudinary (activación por variable de entorno; seguro de apagar) ---
 # Pon USE_CLOUDINARY=true en Railway y agrega las 3 credenciales para activarlo.
+# --- Cloudinary configuration ---
 USE_CLOUDINARY = env.bool("USE_CLOUDINARY", default=False)
 
 if USE_CLOUDINARY:
     INSTALLED_APPS += ["cloudinary", "cloudinary_storage"]
-
-    # Todos los ImageField se guardan en Cloudinary
-    DEFAULT_FILE_STORAGE = "cloudinary_storage.storage.MediaCloudinaryStorage"
-
-    # Credenciales desde variables de entorno (NO hardcodear)
-    CLOUDINARY_CLOUD_NAME = env("CLOUDINARY_CLOUD_NAME")
-    CLOUDINARY_API_KEY = env("CLOUDINARY_API_KEY")
-    CLOUDINARY_API_SECRET = env("CLOUDINARY_API_SECRET")
-
-    CLOUDINARY_STORAGE = {
-        "CLOUD_NAME": CLOUDINARY_CLOUD_NAME,
-        "API_KEY": CLOUDINARY_API_KEY,
-        "API_SECRET": CLOUDINARY_API_SECRET,
+    
+    # Nueva sintaxis STORAGES para Django 5.2+
+    STORAGES = {
+        "default": {
+            "BACKEND": "cloudinary_storage.storage.MediaCloudinaryStorage",
+        },
+        "staticfiles": {
+            "BACKEND": "django.contrib.staticfiles.storage.StaticFilesStorage",
+        },
     }
+    
+    # Configuración de Cloudinary
+    import cloudinary
+    cloudinary.config(
+        cloud_name=env("CLOUDINARY_CLOUD_NAME"),
+        api_key=env("CLOUDINARY_API_KEY"),
+        api_secret=env("CLOUDINARY_API_SECRET"),
+        secure=True
+    )
