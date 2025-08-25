@@ -26,7 +26,7 @@ INSTALLED_APPS = [
     'corsheaders',
 
     # App propia
-    #'inventory_app',
+    # 'inventory_app',
     'inventory_app.apps.InventoryAppConfig',
 ]
 
@@ -82,7 +82,7 @@ DATABASES = {
         'HOST': env('DB_HOST'),
         'PORT': env('DB_PORT'),
         'OPTIONS': {
-            'sslmode': 'require', 
+            'sslmode': 'require',
         }
     }
 }
@@ -129,7 +129,6 @@ CSRF_TRUSTED_ORIGINS = [
     "https://qualitycore-inventory-frontend-production.up.railway.app",
 ]
 
-
 # --- Cookies seguras para sesiones y CSRF
 SESSION_COOKIE_SAMESITE = "None"
 SESSION_COOKIE_SECURE = True
@@ -141,7 +140,28 @@ CORS_ALLOW_CREDENTIALS = True
 
 # --- Security / Proxy ---
 SECURE_PROXY_SSL_HEADER = ('HTTP_X_FORWARDED_PROTO', 'https')
-USE_X_FORWARDED_HOST = True  
+USE_X_FORWARDED_HOST = True
 
 # DB pool
 DATABASES['default']['CONN_MAX_AGE'] = 60
+
+# --- Cloudinary (activación por variable de entorno; seguro de apagar) ---
+# Pon USE_CLOUDINARY=true en Railway y agrega las 3 credenciales para activarlo.
+USE_CLOUDINARY = env.bool("USE_CLOUDINARY", default=False)
+
+if USE_CLOUDINARY:
+    INSTALLED_APPS += ["cloudinary", "cloudinary_storage"]
+
+    # Todos los ImageField se guardan en Cloudinary
+    DEFAULT_FILE_STORAGE = "cloudinary_storage.storage.MediaCloudinaryStorage"
+
+    # Credenciales desde variables de entorno (NO hardcodear)
+    CLOUDINARY_CLOUD_NAME = env("CLOUDINARY_CLOUD_NAME")
+    CLOUDINARY_API_KEY = env("CLOUDINARY_API_KEY")
+    CLOUDINARY_API_SECRET = env("CLOUDINARY_API_SECRET")
+
+    CLOUDINARY_STORAGE = {
+        "CLOUD_NAME": CLOUDINARY_CLOUD_NAME,
+        "API_KEY": CLOUDINARY_API_KEY,
+        "API_SECRET": CLOUDINARY_API_SECRET,
+    }
