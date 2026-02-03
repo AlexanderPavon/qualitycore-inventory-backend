@@ -1,33 +1,55 @@
 # models/supplier.py
 from django.db import models
 from django.core.validators import RegexValidator, EmailValidator
+from inventory_app.managers import SoftDeleteManager
+from inventory_app.constants import ValidationMessages
 
 class Supplier(models.Model):
+    DOCUMENT_TYPE_CHOICES = [
+        ('cedula', 'Cédula'),
+        ('ruc', 'RUC'),
+        ('passport', 'Pasaporte'),
+    ]
+
     name = models.CharField(max_length=100)
 
     email = models.EmailField(
         max_length=100,
+        unique=True,
+        error_messages={
+            'unique': 'Ya existe un proveedor con este correo electrónico.'
+        },
         validators=[
             EmailValidator(message="El correo electrónico no es válido.")
         ]
     )
 
+    document_type = models.CharField(
+        max_length=10,
+        choices=DOCUMENT_TYPE_CHOICES,
+        default='ruc'
+    )
+
     tax_id = models.CharField(
         max_length=13,
-        validators=[
-            RegexValidator(
-                regex=r'^\d{10,13}$',
-                message='La cédula o RUC debe tener entre 10 y 13 dígitos numéricos.'
-            )
-        ]
+        unique=True,
+        error_messages={
+            'unique': 'Ya existe un proveedor con este documento.'
+        }
     )
 
     phone = models.CharField(
-        max_length=13,
+        max_length=15,
+        unique=True,
+        blank=False,
+        null=False,
+        error_messages={
+            'unique': 'Ya existe un proveedor con este teléfono.'
+        },
         validators=[
             RegexValidator(
-                regex=r'^\d+$',
-                message='El teléfono solo debe contener números.'
+                regex=ValidationMessages.PHONE_REGEX,
+                message=ValidationMessages.PHONE_INVALID_FORMAT
             )
         ]
     )
@@ -37,6 +59,10 @@ class Supplier(models.Model):
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
     deleted_at = models.DateTimeField(null=True, blank=True)
+
+    # Managers
+    objects = SoftDeleteManager()  # Filtra automáticamente registros eliminados
+    all_objects = models.Manager()  # Acceso a todos los registros
 
     def __str__(self):
         return self.name

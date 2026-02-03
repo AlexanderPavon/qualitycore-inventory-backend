@@ -1,8 +1,11 @@
 # serializers/quotation_serializer.py
 from rest_framework import serializers
+from django.utils import timezone
+from django.core.exceptions import ValidationError as DjangoValidationError
+
 from inventory_app.models.quotation import Quotation
 from inventory_app.serializers.quoted_product_serializer import QuotedProductSerializer
-from inventory_app.models.quoted_product import QuotedProduct
+from inventory_app.services import QuotationService
 
 
 class QuotationSerializer(serializers.ModelSerializer):
@@ -12,6 +15,17 @@ class QuotationSerializer(serializers.ModelSerializer):
     vat = serializers.DecimalField(source='tax', max_digits=10, decimal_places=2)
     observations = serializers.CharField(source='notes', required=False, allow_blank=True)
 
+    # Convertir la fecha UTC a la zona horaria local configurada
+    date = serializers.SerializerMethodField()
+
+    def get_date(self, obj):
+        """Convierte la fecha UTC a la zona horaria local (America/Guayaquil)"""
+        if obj.date:
+            # timezone.localtime convierte automáticamente a la zona horaria configurada en settings.TIME_ZONE
+            local_date = timezone.localtime(obj.date)
+            return local_date.isoformat()
+        return None
+
     class Meta:
         model = Quotation
         fields = [
@@ -20,18 +34,36 @@ class QuotationSerializer(serializers.ModelSerializer):
         ]
 
     def create(self, validated_data):
-        # Sacamos los productos cotizados
+        """
+        Crea una cotización delegando la lógica de negocio al servicio.
+        El serializer solo se encarga de formatear/parsear datos.
+        """
+        # Extraer datos del request
         products_data = validated_data.pop('quoted_products')
-
-        # Extraemos los campos renombrados
-        tax = validated_data.pop('tax')
         notes = validated_data.pop('notes', "")
+        customer = validated_data.get('customer')
+        user = validated_data.get('user')
 
-        # Creamos la cotización con los nombres del modelo
-        quotation = Quotation.objects.create(**validated_data, tax=tax, notes=notes)
+        # Transformar productos al formato que espera el servicio
+        products_for_service = [
+            {
+                'product_id': prod['product'].id,
+                'quantity': prod['quantity'],
+                'unit_price': prod['unit_price']
+            }
+            for prod in products_data
+        ]
 
-        # Creamos los productos cotizados vinculados
-        for prod in products_data:
-            QuotedProduct.objects.create(quotation=quotation, **prod)
+        try:
+            # Delegar creación al servicio (lógica de negocio)
+            quotation = QuotationService.create_quotation(
+                customer_id=customer.id,
+                user_id=user.id,
+                products=products_for_service,
+                notes=notes
+            )
+            return quotation
 
-        return quotation
+        except DjangoValidationError as e:
+            # Convertir ValidationError de Django a DRF
+            raise serializers.ValidationError(str(e))

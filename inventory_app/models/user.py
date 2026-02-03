@@ -2,9 +2,18 @@
 from django.db import models
 from django.contrib.auth.models import AbstractUser, BaseUserManager
 from django.core.validators import RegexValidator
+from inventory_app.managers.soft_delete_manager import SoftDeleteQuerySet
+from inventory_app.constants import UserRole, ValidationMessages
 
 class UserManager(BaseUserManager):
+    """
+    Manager personalizado para el modelo User con soporte para soft delete.
+    """
     use_in_migrations = True
+
+    def get_queryset(self):
+        """Filtra automáticamente usuarios eliminados (soft delete)"""
+        return SoftDeleteQuerySet(self.model, using=self._db).filter(deleted_at__isnull=True)
 
     def create_user(self, email, password=None, **extra_fields):
         if not email:
@@ -27,24 +36,38 @@ class UserManager(BaseUserManager):
 
         return self.create_user(email, password, **extra_fields)
 
+    def all_with_deleted(self):
+        """Retorna todos los usuarios, incluidos los eliminados"""
+        return SoftDeleteQuerySet(self.model, using=self._db)
+
 class User(AbstractUser):
     username = None
-    email = models.EmailField('email address', unique=True)
+    email = models.EmailField(
+        'email address',
+        unique=True,
+        db_index=True,
+        error_messages={
+            'unique': 'Ya existe un usuario con este correo electrónico.'
+        }
+    )  # Índice explícito para búsquedas
     name = models.CharField(max_length=100)
 
-    ROLE_CHOICES = [
-        ('Administrator', 'Administrator'),
-        ('User', 'User'),
-    ]
+    # Usar constantes centralizadas
+    ROLE_CHOICES = UserRole.CHOICES
     role = models.CharField(max_length=50, choices=ROLE_CHOICES)
 
     phone = models.CharField(
-        max_length=10,
-        blank=True,
+        max_length=15,
+        unique=True,
+        blank=False,
+        null=False,
+        error_messages={
+            'unique': 'Ya existe un usuario con este teléfono.'
+        },
         validators=[
             RegexValidator(
-                regex=r'^\d{10}$',
-                message='El teléfono debe tener exactamente 10 dígitos.',
+                regex=ValidationMessages.PHONE_REGEX,
+                message=ValidationMessages.PHONE_INVALID_FORMAT,
                 code='invalid_phone'
             )
         ]
@@ -56,7 +79,8 @@ class User(AbstractUser):
     USERNAME_FIELD = 'email'
     REQUIRED_FIELDS = ['name', 'role']
 
-    objects = UserManager()
+    objects = UserManager()  # Filtra automáticamente usuarios eliminados
+    all_objects = models.Manager()  # Acceso a todos los usuarios (incluidos eliminados)
 
     def __str__(self):
         return self.email

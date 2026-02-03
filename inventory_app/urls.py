@@ -9,11 +9,14 @@ from inventory_app.views.supplier_view import SupplierListCreateView, SupplierDe
 from inventory_app.views.product_view import ProductListCreateView, ProductDetailView
 from inventory_app.views.category_view import CategoryListCreateView, CategoryDetailView
 from inventory_app.views.movement_view import MovementListCreateView
+from inventory_app.views.sale_view import SaleListCreateView, SaleDetailView
+from inventory_app.views.purchase_view import PurchaseListCreateView, PurchaseDetailView
 from inventory_app.views.report_view import ReportListView, ReportGeneratePDFView, ReportDownloadView
 from inventory_app.views.dashboard_view import DashboardSummaryView
 
 from inventory_app.views.quotation_view import (
-    QuotationCreateView, QuotationListView, QuotationDetailView, QuotationPDFView
+    QuotationCreateView, QuotationListView, QuotationDetailView,
+    QuotationPDFView, QuotationPDFStatusView
 )
 
 from inventory_app.views.alert_view import AlertListView, AlertUpdateView
@@ -50,6 +53,14 @@ urlpatterns = [
     # Movements
     path('movements/', MovementListCreateView.as_view()),
 
+    # Sales
+    path('sales/', SaleListCreateView.as_view()),
+    path('sales/<int:pk>/', SaleDetailView.as_view()),
+
+    # Purchases
+    path('purchases/', PurchaseListCreateView.as_view()),
+    path('purchases/<int:pk>/', PurchaseDetailView.as_view()),
+
     # Reports
     path('reports/', ReportListView.as_view()),
     path('reports/generate/', ReportGeneratePDFView.as_view()),
@@ -60,6 +71,7 @@ urlpatterns = [
     path('quotations/<int:pk>/', QuotationDetailView.as_view()),
     path('quotations/create/', QuotationCreateView.as_view()),
     path('quotations/pdf/<int:quotation_id>/', QuotationPDFView.as_view()),
+    path('quotations/pdf/status/<str:task_id>/', QuotationPDFStatusView.as_view()),
 
 
     # Alerts

@@ -6,15 +6,16 @@ from rest_framework.response import Response
 from inventory_app.models.quotation import Quotation
 from inventory_app.models.report import Report
 from inventory_app.serializers.quotation_serializer import QuotationSerializer
+from inventory_app.tasks import generate_quotation_pdf
+from inventory_app.constants import UserRole
 from datetime import datetime
 import os
 from decimal import Decimal
-from reportlab.lib.pagesizes import letter
-from reportlab.platypus import SimpleDocTemplate, Table, TableStyle, Paragraph, Spacer, Image
-from reportlab.lib import colors
-from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
 from django.conf import settings
-from django.http import FileResponse, Http404  # 👈 nuevos imports
+from django.http import FileResponse, Http404
+import logging
+
+logger = logging.getLogger(__name__)
 
 class QuotationCreateView(APIView):
     permission_classes = [IsAuthenticated]
@@ -48,99 +49,84 @@ class QuotationListView(generics.ListAPIView):
 
     def get_queryset(self):
         user = self.request.user
-        if user.rol == "Administrator":
+        if user.role in [UserRole.ADMINISTRATOR, UserRole.SUPER_ADMIN]:
             return Quotation.objects.filter(deleted_at__isnull=True).order_by('-date')
         else:
             return Quotation.objects.filter(user=user, deleted_at__isnull=True).order_by('-date')
 
 class QuotationDetailView(generics.RetrieveAPIView):
-    queryset = Quotation.objects.filter(deleted_at__isnull=True)
+    queryset = Quotation.objects.filter(deleted_at__isnull=True).order_by('-id')
     serializer_class = QuotationSerializer
     permission_classes = [IsAuthenticated]
 
 class QuotationPDFView(APIView):
+    """
+    Genera PDF de cotización de forma asíncrona usando Celery.
+    Retorna task_id para que el frontend pueda consultar el estado.
+    """
     permission_classes = [IsAuthenticated]
 
-    def get(self, request, quotation_id):
+    def post(self, request, quotation_id):
+        """
+        Inicia la generación asíncrona del PDF.
+
+        Returns:
+            {
+                "task_id": "uuid-de-la-tarea",
+                "message": "PDF generation started"
+            }
+        """
         try:
-            quotation = Quotation.objects.get(id=quotation_id, deleted_at__isnull=True)
+            # Verificar que la cotización existe
+            Quotation.objects.get(id=quotation_id, deleted_at__isnull=True)
         except Quotation.DoesNotExist:
-            raise Http404("Cotización no encontrada")
+            return Response(
+                {"error": "Cotización no encontrada"},
+                status=status.HTTP_404_NOT_FOUND
+            )
 
-        # ruta destino del PDF
-        now = datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
-        filename = f"cotizacion_{quotation.id}_{now}.pdf"
-        out_dir = os.path.join(settings.MEDIA_ROOT, "reports")
-        os.makedirs(out_dir, exist_ok=True)
-        filepath = os.path.join(out_dir, filename)
+        # Lanzar tarea asíncrona
+        task = generate_quotation_pdf.delay(quotation_id, request.user.id)
 
-        # --- generar PDF (tu mismo código, SOLO cambia que el destino es `filepath`) ---
-        doc = SimpleDocTemplate(filepath, pagesize=letter)
-        styles = getSampleStyleSheet()
-        styles.add(ParagraphStyle(name='HeaderTitle', fontSize=22, alignment=1, spaceAfter=14))
-        styles.add(ParagraphStyle(name='Totales', fontSize=11, textColor=colors.HexColor("#256029")))
-        styles.add(ParagraphStyle(name='TotalBold', fontSize=12, textColor=colors.HexColor("#1f2937"), spaceBefore=5))
-        styles.add(ParagraphStyle(name='ObsStyle', fontSize=10, textColor=colors.HexColor("#14532d")))
+        logger.info(f"Task de generación de PDF iniciada: {task.id} para cotización {quotation_id}")
 
-        elements = []
+        return Response({
+            "task_id": task.id,
+            "message": "PDF generation started",
+            "quotation_id": quotation_id
+        }, status=status.HTTP_202_ACCEPTED)
 
-        logo_path = os.path.join(settings.BASE_DIR, "static", "images", "logo.png")
-        if os.path.exists(logo_path):
-            img = Image(logo_path, width=90, height=40)
-            img.hAlign = 'RIGHT'
-            elements.append(img)
 
-        elements.append(Paragraph("COTIZACIÓN", styles['HeaderTitle']))
-        elements.append(Spacer(1, 8))
-        elements.append(Paragraph(f"<b>Fecha:</b> {quotation.date.strftime('%d/%m/%Y')}", styles["Normal"]))
-        elements.append(Paragraph(f"<b>Cliente:</b> {quotation.customer.name}", styles["Normal"]))
-        elements.append(Paragraph(f"<b>Vendedor:</b> {quotation.user.name}", styles["Normal"]))
-        elements.append(Spacer(1, 18))
+class QuotationPDFStatusView(APIView):
+    """
+    Consulta el estado de una tarea de generación de PDF.
+    """
+    permission_classes = [IsAuthenticated]
 
-        data = [["Producto", "Cantidad", "Precio Unitario", "Subtotal"]]
-        for p in quotation.quoted_products.all():
-            data.append([
-                p.product.name,
-                p.quantity,
-                f"${p.unit_price:.2f}",
-                f"${p.subtotal:.2f}"
-            ])
+    def get(self, request, task_id):
+        """
+        Consulta el estado de la tarea.
 
-        table = Table(data, colWidths=[200, 80, 80, 80])
-        table.setStyle(TableStyle([
-            ("BACKGROUND", (0, 0), (-1, 0), colors.HexColor("#10b981")),
-            ("TEXTCOLOR", (0, 0), (-1, 0), colors.white),
-            ("ALIGN", (0, 0), (-1, -1), "CENTER"),
-            ("FONTNAME", (0, 0), (-1, 0), "Helvetica-Bold"),
-            ("FONTSIZE", (0, 0), (-1, -1), 10),
-            ("GRID", (0, 0), (-1, -1), 0.5, colors.grey),
-            ("ROWBACKGROUNDS", (0, 1), (-1, -1), [colors.whitesmoke, colors.lightgrey])
-        ]))
-        elements.append(table)
-        elements.append(Spacer(1, 18))
+        Returns:
+            {
+                "state": "PENDING|STARTED|SUCCESS|FAILURE",
+                "result": "ruta/al/archivo.pdf" (si SUCCESS),
+                "error": "mensaje de error" (si FAILURE)
+            }
+        """
+        from celery.result import AsyncResult
 
-        elements.append(Paragraph(f"<b>Subtotal:</b> ${quotation.subtotal:.2f}", styles["Totales"]))
-        elements.append(Paragraph(f"<b>IVA (15%):</b> ${quotation.tax:.2f}", styles["Totales"]))
-        elements.append(Paragraph(f"<b>Total:</b> <b>${quotation.total:.2f}</b>", styles["TotalBold"]))
+        task = AsyncResult(task_id)
 
-        # OJO: si tu modelo usa 'observations' en lugar de 'notes', cámbialo aquí
-        if getattr(quotation, "notes", None):
-            elements.append(Spacer(1, 12))
-            elements.append(Paragraph("<b>OBSERVACIONES:</b>", styles["Normal"]))
-            elements.append(Spacer(1, 4))
-            elements.append(Paragraph(quotation.notes, styles["ObsStyle"]))
+        response_data = {
+            "state": task.state,
+            "task_id": task_id
+        }
 
-        elements.append(Spacer(1, 12))
-        elements.append(Paragraph("<i>⚠ Cotización válida por 30 días</i>", styles["Normal"]))
+        if task.state == 'SUCCESS':
+            response_data["result"] = task.result
+            response_data["download_url"] = f"/media/{task.result}"
+        elif task.state == 'FAILURE':
+            response_data["error"] = str(task.info)
 
-        doc.build(elements)
-        # --- fin generación PDF ---
-
-        # opcional: registra el reporte en BD
-        Report.objects.create(file=f"reports/{filename}", user=request.user)
-
-        # 👉 DEVUELVE EL PDF, no JSON
-        return FileResponse(open(filepath, "rb"),
-                           content_type="application/pdf",
-                           as_attachment=False,     # True si quieres forzar descarga
-                           filename=filename)
+        return Response(response_data)

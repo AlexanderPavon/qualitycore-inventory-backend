@@ -4,7 +4,7 @@ from inventory_app.models.category import Category
 from inventory_app.serializers.category_serializer import CategorySerializer
 
 class CategoryListCreateView(generics.ListCreateAPIView):
-    queryset = Category.objects.all()
+    queryset = Category.objects.all().order_by('-id')
     serializer_class = CategorySerializer
 
 class CategoryDetailView(generics.RetrieveUpdateDestroyAPIView):

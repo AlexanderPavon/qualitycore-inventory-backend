@@ -5,6 +5,7 @@ from .customer_serializer import *
 from .category_serializer import *
 from .product_serializer import *
 from .alert_serializer import *
+from .sale_serializer import *
 from .movement_serializer import *
 from .quotation_serializer import *
 from .quoted_product_serializer import *

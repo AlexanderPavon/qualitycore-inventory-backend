@@ -6,6 +6,7 @@ from rest_framework.response import Response
 from inventory_app.models.report import Report
 from inventory_app.models.movement import Movement
 from inventory_app.serializers.report_serializer import ReportSerializer
+from inventory_app.constants import UserRole
 from datetime import datetime, timedelta
 from django.conf import settings
 from reportlab.lib.pagesizes import letter
@@ -25,7 +26,7 @@ class ReportDownloadView(APIView):
     def get(self, request, pk):
         report = get_object_or_404(Report, pk=pk)
         # opcional: limitar al dueño o admin
-        # if report.user != request.user and getattr(request.user, "role", "") != "Administrator":
+        # if report.user != request.user and getattr(request.user, "role", "") != UserRole.ADMINISTRATOR:
         #     return Response(status=status.HTTP_403_FORBIDDEN)
 
         file_path = Path(settings.MEDIA_ROOT) / report.file.name  # e.g. reports/xxxx.pdf
@@ -63,7 +64,7 @@ class ReportGeneratePDFView(APIView):
             return Response({"message": "Fechas inválidas"}, status=status.HTTP_400_BAD_REQUEST)
 
         now = datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
-        filename = f"reporte_{report_type}_{now}.pdf"
+        filename = f"report_{report_type}_{now}.pdf"
         filepath = os.path.join(settings.MEDIA_ROOT, 'reports', filename)
         os.makedirs(os.path.dirname(filepath), exist_ok=True)
 
@@ -128,7 +129,14 @@ class ReportGeneratePDFView(APIView):
                 movements = movements.filter(date__gte=start_dt)
             if end_dt:
                 movements = movements.filter(date__lte=end_dt)
-            movements = movements.order_by("-date")[:50]
+
+            # Optimización: select_related para evitar N+1 queries
+            movements = movements.select_related(
+                'product',           # Para m.product.name
+                'product__supplier', # Para m.product.supplier.name
+                'customer',          # Para m.customer.name
+                'user'               # Para m.user.name
+            ).order_by("-date")[:50]
 
             data = [["Fecha", "Tipo", "Producto", "Cantidad", "Cliente / Proveedor", "Usuario"]]
             for m in movements:

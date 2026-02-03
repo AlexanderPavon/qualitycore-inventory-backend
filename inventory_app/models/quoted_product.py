@@ -2,6 +2,7 @@
 from django.db import models
 from .product import Product
 from .quotation import Quotation
+from inventory_app.managers import SoftDeleteManager
 
 class QuotedProduct(models.Model):
     quantity = models.IntegerField()
@@ -14,6 +15,10 @@ class QuotedProduct(models.Model):
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
     deleted_at = models.DateTimeField(null=True, blank=True)
+
+    # Managers
+    objects = SoftDeleteManager()  # Filtra automáticamente registros eliminados
+    all_objects = models.Manager()  # Acceso a todos los registros
 
     def save(self, *args, **kwargs):
         self.subtotal = self.quantity * self.unit_price

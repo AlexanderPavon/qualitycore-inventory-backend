@@ -1,6 +1,7 @@
 # models/alert.py
 from django.db import models
 from .product import Product
+from inventory_app.managers import SoftDeleteManager
 
 class Alert(models.Model):
     ALERT_TYPES = [
@@ -15,6 +16,10 @@ class Alert(models.Model):
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
     deleted_at = models.DateTimeField(null=True, blank=True)
+
+    # Managers
+    objects = SoftDeleteManager()  # Filtra automáticamente registros eliminados
+    all_objects = models.Manager()  # Acceso a todos los registros
 
     def __str__(self):
         return f"[{self.get_type_display()}] {self.product.name}"

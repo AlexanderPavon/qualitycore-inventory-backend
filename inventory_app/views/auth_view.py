@@ -6,11 +6,21 @@ from rest_framework.permissions import BasePermission
 from django.contrib.auth import authenticate, login
 from django.core.mail import send_mail
 from django.contrib.auth.tokens import default_token_generator
+from django.contrib.auth.password_validation import validate_password
+from django.core.exceptions import ValidationError
+from django.conf import settings
 from inventory_app.models.user import User
 from inventory_app.serializers.user_serializer import UserSerializer
+from inventory_app.throttles import (
+    LoginRateThrottle,
+    PasswordResetRateThrottle,
+    PasswordChangeRateThrottle,
+)
 
 # --- Login ---
 class LoginView(APIView):
+    throttle_classes = [LoginRateThrottle]
+
     def post(self, request):
         email = request.data.get('email')
         password = request.data.get('password')
@@ -25,14 +35,19 @@ class LoginView(APIView):
 
 # --- Forgot Password ---
 class ForgotPasswordView(APIView):
+    throttle_classes = [PasswordResetRateThrottle]
+
     def post(self, request):
         email = request.data.get('email')
         try:
             user = User.objects.get(email=email)
             token = default_token_generator.make_token(user)
             uid = user.pk
-            frontend_url = 'https://qualitycore-inventory-frontend-production.up.railway.app/reset-password'
-            reset_url = f"{frontend_url}?uid={uid}&token={token}"
+
+            # Obtener URL del frontend desde variables de entorno
+            # Permite desarrollo local y producción sin cambiar código
+            frontend_base_url = getattr(settings, 'FRONTEND_URL', 'http://localhost:3000')
+            reset_url = f"{frontend_base_url}/reset-password?uid={uid}&token={token}"
             send_mail(
                 subject="Recupera tu contraseña",
                 message=(
@@ -54,13 +69,26 @@ class ForgotPasswordView(APIView):
 
 # --- Reset Password ---
 class ResetPasswordView(APIView):
+    throttle_classes = [PasswordResetRateThrottle]
+
     def post(self, request):
         uid = request.data.get('uid')
         token = request.data.get('token')
         new_password = request.data.get('new_password')
+
+        # Validar que se proporcionó la contraseña
+        if not new_password:
+            return Response({'message': 'La nueva contraseña es requerida'}, status=status.HTTP_400_BAD_REQUEST)
+
         try:
             user = User.objects.get(pk=uid)
             if default_token_generator.check_token(user, token):
+                # Validar la nueva contraseña con los validadores de Django
+                try:
+                    validate_password(new_password, user=user)
+                except ValidationError as e:
+                    return Response({'message': list(e.messages)}, status=status.HTTP_400_BAD_REQUEST)
+
                 user.set_password(new_password)
                 user.save()
                 return Response({'message': 'Contraseña actualizada correctamente'})
@@ -72,13 +100,29 @@ class ResetPasswordView(APIView):
 # --- Change Password ---
 class ChangePasswordView(APIView):
     permission_classes = [permissions.IsAuthenticated]
+    throttle_classes = [PasswordChangeRateThrottle]
 
     def post(self, request):
         user = request.user
         old_password = request.data.get('old_password')
         new_password = request.data.get('new_password')
+
+        # Validar que se proporcionaron ambas contraseñas
+        if not old_password:
+            return Response({'error': 'La contraseña actual es requerida.'}, status=status.HTTP_400_BAD_REQUEST)
+        if not new_password:
+            return Response({'error': 'La nueva contraseña es requerida.'}, status=status.HTTP_400_BAD_REQUEST)
+
+        # Verificar la contraseña actual
         if not user.check_password(old_password):
-            return Response({'error': 'Current password is incorrect.'}, status=status.HTTP_400_BAD_REQUEST)
+            return Response({'error': 'La contraseña actual es incorrecta.'}, status=status.HTTP_400_BAD_REQUEST)
+
+        # Validar la nueva contraseña con los validadores de Django
+        try:
+            validate_password(new_password, user=user)
+        except ValidationError as e:
+            return Response({'error': list(e.messages)}, status=status.HTTP_400_BAD_REQUEST)
+
         user.set_password(new_password)
         user.save()
         return Response({'message': 'Contraseña cambiada exitosamente'}, status=status.HTTP_200_OK)

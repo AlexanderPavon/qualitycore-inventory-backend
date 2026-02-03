@@ -1,5 +1,5 @@
 """
-URL configuration for inventario project.
+URL configuration for inventory project.
 
 The `urlpatterns` list routes URLs to views. For more information please see:
     https://docs.djangoproject.com/en/5.1/topics/http/urls/
@@ -21,7 +21,7 @@ from django.conf.urls.static import static
 
 urlpatterns = [
     path('admin/', admin.site.urls),
-    path('api/productos/', include('inventory_app.urls')),
+    path('api/products/', include('inventory_app.urls')),
 
 ]
 

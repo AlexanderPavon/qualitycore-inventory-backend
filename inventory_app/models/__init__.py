@@ -4,7 +4,10 @@ from .customer import *
 from .category import *
 from .product import *
 from .alert import *
+from .sale import *
+from .purchase import *
 from .movement import *
 from .quotation import *
 from .quoted_product import *
 from .report import *
+from .audit_log import *
