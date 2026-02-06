@@ -43,6 +43,12 @@ AUTHENTICATION_BACKENDS = [
 
 # --- Django REST Framework configuration ---
 REST_FRAMEWORK = {
+    # Autenticación JWT como método principal
+    'DEFAULT_AUTHENTICATION_CLASSES': [
+        'rest_framework_simplejwt.authentication.JWTAuthentication',
+        'rest_framework.authentication.SessionAuthentication',  # Mantener para admin
+    ],
+
     # Paginación global para todos los endpoints de lista
     'DEFAULT_PAGINATION_CLASS': 'rest_framework.pagination.PageNumberPagination',
     'PAGE_SIZE': 20,  # Número de resultados por página por defecto
@@ -231,3 +237,22 @@ CELERY_TIMEZONE = TIME_ZONE
 CELERY_TASK_TRACK_STARTED = True
 CELERY_TASK_TIME_LIMIT = 30 * 60  # 30 minutos máximo por tarea
 CELERY_RESULT_EXPIRES = 3600  # Los resultados expiran después de 1 hora
+
+# --- JWT Configuration ---
+from datetime import timedelta
+
+SIMPLE_JWT = {
+    'ACCESS_TOKEN_LIFETIME': timedelta(minutes=60),  # Token válido por 1 hora
+    'REFRESH_TOKEN_LIFETIME': timedelta(days=7),     # Refresh válido por 7 días
+    'ROTATE_REFRESH_TOKENS': True,                   # Rota el refresh token en cada uso
+    'BLACKLIST_AFTER_ROTATION': False,               # No usar blacklist (simplifica)
+    'UPDATE_LAST_LOGIN': True,                       # Actualiza last_login del usuario
+
+    'ALGORITHM': 'HS256',
+    'SIGNING_KEY': SECRET_KEY,
+
+    'AUTH_HEADER_TYPES': ('Bearer',),
+    'AUTH_HEADER_NAME': 'HTTP_AUTHORIZATION',
+    'USER_ID_FIELD': 'id',
+    'USER_ID_CLAIM': 'user_id',
+}

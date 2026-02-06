@@ -3,7 +3,8 @@ from rest_framework.views import APIView
 from rest_framework.response import Response
 from rest_framework import status, permissions
 from rest_framework.permissions import BasePermission
-from django.contrib.auth import authenticate, login
+from rest_framework_simplejwt.tokens import RefreshToken
+from django.contrib.auth import authenticate
 from django.core.mail import send_mail
 from django.contrib.auth.tokens import default_token_generator
 from django.contrib.auth.password_validation import validate_password
@@ -17,9 +18,11 @@ from inventory_app.throttles import (
     PasswordChangeRateThrottle,
 )
 
-# --- Login ---
+# --- Login (JWT) ---
 class LoginView(APIView):
     throttle_classes = [LoginRateThrottle]
+    authentication_classes = []  # No requiere auth para login
+    permission_classes = []
 
     def post(self, request):
         email = request.data.get('email')
@@ -28,9 +31,19 @@ class LoginView(APIView):
         if user:
             if not user.is_active:
                 return Response({'message': 'El usuario está inactivo. Contacta al administrador.'}, status=status.HTTP_403_FORBIDDEN)
-            login(request, user)
+
+            # Generar tokens JWT
+            refresh = RefreshToken.for_user(user)
             serializer = UserSerializer(user)
-            return Response({'message': 'Inicio de sesión exitoso', 'user': serializer.data})
+
+            return Response({
+                'message': 'Inicio de sesión exitoso',
+                'user': serializer.data,
+                'tokens': {
+                    'access': str(refresh.access_token),
+                    'refresh': str(refresh),
+                }
+            })
         return Response({'message': 'Credenciales incorrectas'}, status=status.HTTP_401_UNAUTHORIZED)
 
 # --- Forgot Password ---

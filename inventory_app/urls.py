@@ -1,4 +1,5 @@
 from django.urls import path
+from rest_framework_simplejwt.views import TokenRefreshView
 
 from inventory_app.views.auth_view import (
     LoginView, ForgotPasswordView, ResetPasswordView, ChangePasswordView
@@ -26,6 +27,7 @@ from inventory_app.views.csrf_view import csrf_ready
 urlpatterns = [
     # Auth
     path('login/', LoginView.as_view()),
+    path('token/refresh/', TokenRefreshView.as_view(), name='token_refresh'),
     path('forgot-password/', ForgotPasswordView.as_view()),
     path('reset-password/', ResetPasswordView.as_view()),
     path('change-password/', ChangePasswordView.as_view()),

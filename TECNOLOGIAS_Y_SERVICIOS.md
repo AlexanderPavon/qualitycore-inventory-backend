@@ -209,7 +209,7 @@ class Product(models.Model):
 
 **URLs generadas:**
 ```
-https://res.cloudinary.com/ddzz6jt4h/image/upload/v1234567890/products/imagen.jpg
+https://res.cloudinary.com/tu_cloud_name/image/upload/v1234567890/products/imagen.jpg
 ```
 
 **Dashboard:** https://cloudinary.com/console/
@@ -579,9 +579,9 @@ EMAIL_BACKEND = 'django.core.mail.backends.smtp.EmailBackend'
 EMAIL_HOST = 'smtp.gmail.com'
 EMAIL_PORT = 587
 EMAIL_USE_TLS = True
-EMAIL_HOST_USER = 'qualitycoreservice@gmail.com'
+EMAIL_HOST_USER = 'tu_email@gmail.com'
 EMAIL_HOST_PASSWORD = env('EMAIL_HOST_PASSWORD')  # App Password
-DEFAULT_FROM_EMAIL = 'qualitycoreservice@gmail.com'
+DEFAULT_FROM_EMAIL = 'tu_email@gmail.com'
 ```
 
 **Emails enviados:**

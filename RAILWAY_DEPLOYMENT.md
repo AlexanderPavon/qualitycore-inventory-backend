@@ -41,16 +41,16 @@ DB_PASSWORD=tu-password
 DB_PORT=5432
 
 # Cloudinary
-CLOUDINARY_API_KEY=469118624889779
-CLOUDINARY_API_SECRET=bfr2qtGBYpi9WdkBGnuk5Nx5z3c
-CLOUDINARY_CLOUD_NAME=ddzz6jt4h
+CLOUDINARY_API_KEY=tu_api_key_aqui
+CLOUDINARY_API_SECRET=tu_api_secret_aqui
+CLOUDINARY_CLOUD_NAME=tu_cloud_name_aqui
 USE_CLOUDINARY=true
 
 # Email
-DEFAULT_FROM_EMAIL=qualitycoreservice@gmail.com
+DEFAULT_FROM_EMAIL=tu_email@gmail.com
 EMAIL_HOST=smtp.gmail.com
-EMAIL_HOST_PASSWORD=qujs nnhw aykg vfhj
-EMAIL_HOST_USER=qualitycoreservice@gmail.com
+EMAIL_HOST_PASSWORD=tu_app_password_aqui
+EMAIL_HOST_USER=tu_email@gmail.com
 EMAIL_PORT=587
 EMAIL_USE_TLS=True
 
