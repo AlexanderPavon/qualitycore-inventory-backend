@@ -5,7 +5,6 @@ Centraliza toda la lógica relacionada con movimientos de stock y alertas.
 """
 from django.db import transaction
 from django.db.models import F
-from django.core.cache import cache
 from rest_framework.exceptions import ValidationError
 from inventory_app.models.product import Product
 from inventory_app.models.movement import Movement
@@ -97,9 +96,6 @@ class InventoryService:
         # Actualizar alertas de stock usando el servicio centralizado
         AlertService.update_stock_alerts(product)
 
-        # Invalidar caché del dashboard cuando se crea un movimiento
-        cache.delete('dashboard_summary')
-        logger.info("Dashboard cache invalidated after movement creation")
 
         logger.info(
             f"Movimiento registrado: {movement_type} de {quantity} unidades "

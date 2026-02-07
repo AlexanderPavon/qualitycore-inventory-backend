@@ -54,9 +54,11 @@ class PurchaseService:
             except Product.DoesNotExist:
                 raise ValueError(f"Producto con ID {item['product']} no encontrado.")
 
-            # Validar que el producto está activo
-            if product.status != "Activo":
-                raise ValueError(f"El producto '{product.name}' no está activo.")
+            # Validar que el producto pertenece al proveedor seleccionado
+            if product.supplier_id != supplier.id:
+                raise ValueError(
+                    f"El producto '{product.name}' no pertenece al proveedor '{supplier.name}'."
+                )
 
             quantity = item['quantity']
 

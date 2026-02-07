@@ -77,43 +77,42 @@ class SaleService:
         except User.DoesNotExist:
             raise ValidationError(f"Usuario con ID {user_id} no existe.")
 
-        # Validar todos los productos y cantidades ANTES de crear nada
-        products_data = []
-        total = Decimal('0.00')
-
+        # Validar cantidades antes de la transacción
         for item in items:
-            product_id = item.get('product')
-            quantity = item.get('quantity')
-
-            # Validar cantidad
-            QuantityValidator.validate_min_one(quantity)
-
-            # Obtener producto
-            try:
-                product = Product.objects.get(id=product_id)
-            except Product.DoesNotExist:
-                raise ValidationError(f"Producto con ID {product_id} no existe.")
-
-            # Validar stock disponible
-            StockValidator.validate_availability(product, quantity)
-
-            # Calcular subtotal
-            subtotal = product.price * quantity
-            total += subtotal
-
-            products_data.append({
-                'product': product,
-                'quantity': quantity,
-                'subtotal': subtotal,
-                'stock_before': product.current_stock
-            })
+            QuantityValidator.validate_min_one(item.get('quantity'))
 
         # Establecer fecha inmutable (hora exacta del servidor)
         transaction_date = timezone.now()
 
-        # Usar transacción para garantizar atomicidad
-        # Si algo falla, se hace rollback de todo
+        # Toda la validación y creación dentro de una transacción atómica
+        # con select_for_update para evitar race conditions de stock
         with transaction.atomic():
+            products_data = []
+            total = Decimal('0.00')
+
+            for item in items:
+                product_id = item.get('product')
+                quantity = item.get('quantity')
+
+                # Obtener producto con bloqueo para evitar race conditions
+                try:
+                    product = Product.objects.select_for_update().get(id=product_id)
+                except Product.DoesNotExist:
+                    raise ValidationError(f"Producto con ID {product_id} no existe.")
+
+                # Validar stock disponible (con datos bloqueados/actualizados)
+                StockValidator.validate_availability(product, quantity)
+
+                subtotal = product.price * quantity
+                total += subtotal
+
+                products_data.append({
+                    'product': product,
+                    'quantity': quantity,
+                    'subtotal': subtotal,
+                    'stock_before': product.current_stock
+                })
+
             # Crear la venta
             sale = Sale.objects.create(
                 customer=customer,
@@ -128,17 +127,16 @@ class SaleService:
                 quantity = item_data['quantity']
                 stock_before = item_data['stock_before']
 
-                # Crear movimiento de salida
-                movement = Movement.objects.create(
+                Movement.objects.create(
                     movement_type=MovementType.OUTPUT,
                     product=product,
                     quantity=quantity,
                     user=user,
                     customer=customer,
-                    sale=sale,  # Vincular con la venta
-                    price=product.price,  # Guardar precio histórico
+                    sale=sale,
+                    price=product.price,
                     stock_in_movement=stock_before,
-                    date=transaction_date  # Misma fecha inmutable
+                    date=transaction_date
                 )
 
                 # Actualizar stock del producto
