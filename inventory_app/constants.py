@@ -85,7 +85,35 @@ class BusinessRules:
     MAX_PHONE_LENGTH = 10
     MIN_DOCUMENT_LENGTH = 10
     MAX_DOCUMENT_LENGTH = 13
+    MIN_PASSWORD_LENGTH = 8
 
     # Límites
     MAX_PRODUCT_PRICE = 9999999.99
     MAX_QUANTITY = 99999
+
+    # Paginación
+    DEFAULT_PAGE_SIZE = 20
+    PAGE_SIZE_OPTIONS = [10, 20, 50, 100]
+
+
+class Timeouts:
+    """Timeouts en milisegundos para el frontend"""
+    TOAST_DEFAULT = 5000
+    TOAST_SHORT = 3000
+    TOAST_LONG = 8000
+    MESSAGE_DISPLAY = 4000
+    REDIRECT_DELAY = 2000
+    POLLING_INTERVAL = 2000
+    CLOCK_INTERVAL = 1000
+
+
+class ImageConfig:
+    """Configuración de imágenes"""
+    MAX_SIZE_MB = 2
+    MAX_SIZE_BYTES = 2 * 1024 * 1024
+    MIN_WIDTH = 300
+    MIN_HEIGHT = 300
+    MAX_WIDTH = 2000
+    MAX_HEIGHT = 2000
+    ALLOWED_TYPES = ['image/jpeg', 'image/png']
+    ALLOWED_EXTENSIONS = ['.jpg', '.jpeg', '.png']

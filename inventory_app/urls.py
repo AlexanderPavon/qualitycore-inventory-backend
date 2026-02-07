@@ -21,7 +21,7 @@ from inventory_app.views.quotation_view import (
 )
 
 from inventory_app.views.alert_view import AlertListView, AlertUpdateView
-
+from inventory_app.views.config_view import ConfigView
 
 from inventory_app.views.csrf_view import csrf_ready
 urlpatterns = [
@@ -83,6 +83,8 @@ urlpatterns = [
     # Dashboard
     path('dashboard/summary/', DashboardSummaryView.as_view()),
 
+    # Config (constantes del sistema)
+    path('config/', ConfigView.as_view()),
 
     path('csrf/', csrf_ready),
 

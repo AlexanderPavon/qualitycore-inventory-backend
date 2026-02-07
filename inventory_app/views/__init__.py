@@ -1,6 +1,7 @@
 # views/__init__.py
 from .alert_view import *
 from .category_view import *
+from .config_view import *
 from .customer_view import *
 from .supplier_view import *
 from .product_view import *
