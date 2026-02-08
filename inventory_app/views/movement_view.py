@@ -1,11 +1,10 @@
 # views/movement_view.py
 from rest_framework import generics, status
 from rest_framework.permissions import IsAuthenticated
-from rest_framework.exceptions import PermissionDenied
 from rest_framework.response import Response
 from inventory_app.models.movement import Movement
 from inventory_app.serializers.movement_serializer import MovementSerializer
-from inventory_app.constants import MovementType, UserRole
+from inventory_app.constants import MovementType
 
 class MovementListCreateView(generics.ListCreateAPIView):
     # Optimización: select_related para evitar N+1 queries al serializar
@@ -22,9 +21,6 @@ class MovementListCreateView(generics.ListCreateAPIView):
         Crea un movimiento de inventario.
         La lógica de negocio ahora se maneja en el MovementSerializer que delega a MovementService.
         """
-        if request.user.role not in [UserRole.ADMINISTRATOR, UserRole.SUPER_ADMIN, UserRole.USER]:
-            raise PermissionDenied("No tienes permiso para registrar movimientos.")
-
         # Agregar el usuario autenticado al request data
         data = request.data.copy()
         data['user'] = request.user.id

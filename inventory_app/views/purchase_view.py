@@ -6,6 +6,7 @@ from inventory_app.serializers.purchase_serializer import (
     PurchaseCreateSerializer,
     PurchaseDetailSerializer
 )
+from inventory_app.permissions import IsAdminForWrite
 
 
 class PurchaseListCreateView(generics.ListCreateAPIView):
@@ -15,6 +16,7 @@ class PurchaseListCreateView(generics.ListCreateAPIView):
     POST: Crea una nueva compra con múltiples productos
     """
     queryset = Purchase.objects.filter(deleted_at__isnull=True).prefetch_related('movements__product')
+    permission_classes = [IsAdminForWrite]
 
     def get_serializer_class(self):
         if self.request.method == 'POST':
@@ -25,7 +27,7 @@ class PurchaseListCreateView(generics.ListCreateAPIView):
         # Pasar user_id al contexto del serializer
         serializer = self.get_serializer(
             data=request.data,
-            context={'user_id': 1}  # TODO: Obtener de sesión/autenticación
+            context={'user_id': request.user.id}
         )
         serializer.is_valid(raise_exception=True)
         purchase = serializer.save()
@@ -42,3 +44,4 @@ class PurchaseDetailView(generics.RetrieveAPIView):
     """
     queryset = Purchase.objects.filter(deleted_at__isnull=True).prefetch_related('movements__product')
     serializer_class = PurchaseDetailSerializer
+    permission_classes = [IsAdminForWrite]

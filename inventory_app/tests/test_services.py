@@ -418,7 +418,7 @@ class TestPurchaseService(ServiceBaseTestCase):
         """No debe permitir comprar un producto que no pertenece al proveedor."""
         product_supplier2 = self.create_product_for_supplier(self.supplier2, name='Producto Ajeno')
 
-        with self.assertRaises(ValueError) as ctx:
+        with self.assertRaises(DjangoValidationError) as ctx:
             PurchaseService.create_purchase(
                 supplier_id=self.supplier.id,
                 user_id=self.user.id,
@@ -430,7 +430,7 @@ class TestPurchaseService(ServiceBaseTestCase):
     def test_compra_proveedor_inexistente_falla(self):
         """Una compra con proveedor inexistente debe fallar."""
         product = self.create_product_for_supplier(self.supplier)
-        with self.assertRaises(ValueError):
+        with self.assertRaises(DjangoValidationError):
             PurchaseService.create_purchase(
                 supplier_id=99999,
                 user_id=self.user.id,
@@ -440,7 +440,7 @@ class TestPurchaseService(ServiceBaseTestCase):
     def test_compra_usuario_inexistente_falla(self):
         """Una compra con usuario inexistente debe fallar."""
         product = self.create_product_for_supplier(self.supplier)
-        with self.assertRaises(ValueError):
+        with self.assertRaises(DjangoValidationError):
             PurchaseService.create_purchase(
                 supplier_id=self.supplier.id,
                 user_id=99999,
@@ -449,7 +449,7 @@ class TestPurchaseService(ServiceBaseTestCase):
 
     def test_compra_producto_inexistente_falla(self):
         """Una compra con producto inexistente debe fallar."""
-        with self.assertRaises(ValueError):
+        with self.assertRaises(DjangoValidationError):
             PurchaseService.create_purchase(
                 supplier_id=self.supplier.id,
                 user_id=self.user.id,

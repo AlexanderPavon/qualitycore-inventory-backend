@@ -52,13 +52,14 @@ class ForgotPasswordView(APIView):
 
     def post(self, request):
         email = request.data.get('email')
+        generic_message = 'Si el correo está registrado, recibirás un enlace de recuperación.'
+
         try:
             user = User.objects.get(email=email)
             token = default_token_generator.make_token(user)
             uid = user.pk
 
             # Obtener URL del frontend desde variables de entorno
-            # Permite desarrollo local y producción sin cambiar código
             frontend_base_url = getattr(settings, 'FRONTEND_URL', 'http://localhost:3000')
             reset_url = f"{frontend_base_url}/reset-password?uid={uid}&token={token}"
             send_mail(
@@ -76,9 +77,10 @@ class ForgotPasswordView(APIView):
                 recipient_list=[user.email],
                 fail_silently=False,
             )
-            return Response({'message': f"Se ha enviado un correo electrónico de recuperación de contraseña a {email}."})
         except User.DoesNotExist:
-            return Response({'message': 'No se encontró un usuario con ese correo electrónico.'}, status=status.HTTP_400_BAD_REQUEST)
+            pass  # No revelar si el email existe o no
+
+        return Response({'message': generic_message})
 
 # --- Reset Password ---
 class ResetPasswordView(APIView):

@@ -68,12 +68,12 @@ class SaleService:
 
         # Obtener instancias necesarias
         try:
-            customer = Customer.objects.get(id=customer_id)
+            customer = Customer.objects.get(id=customer_id, deleted_at__isnull=True)
         except Customer.DoesNotExist:
             raise ValidationError(f"Cliente con ID {customer_id} no existe.")
 
         try:
-            user = User.objects.get(id=user_id)
+            user = User.objects.get(id=user_id, deleted_at__isnull=True)
         except User.DoesNotExist:
             raise ValidationError(f"Usuario con ID {user_id} no existe.")
 
@@ -96,7 +96,7 @@ class SaleService:
 
                 # Obtener producto con bloqueo para evitar race conditions
                 try:
-                    product = Product.objects.select_for_update().get(id=product_id)
+                    product = Product.objects.select_for_update().get(id=product_id, deleted_at__isnull=True)
                 except Product.DoesNotExist:
                     raise ValidationError(f"Producto con ID {product_id} no existe.")
 

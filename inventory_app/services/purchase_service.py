@@ -1,6 +1,7 @@
 # services/purchase_service.py
 from django.db import transaction
 from django.utils import timezone
+from django.core.exceptions import ValidationError
 from decimal import Decimal
 
 from inventory_app.models import Purchase, Movement, Product, Supplier, User
@@ -36,13 +37,13 @@ class PurchaseService:
         try:
             supplier = Supplier.objects.get(id=supplier_id, deleted_at__isnull=True)
         except Supplier.DoesNotExist:
-            raise ValueError(f"Proveedor con ID {supplier_id} no encontrado.")
+            raise ValidationError(f"Proveedor con ID {supplier_id} no encontrado.")
 
         # Validar que el usuario existe
         try:
             user = User.objects.get(id=user_id, deleted_at__isnull=True)
         except User.DoesNotExist:
-            raise ValueError(f"Usuario con ID {user_id} no encontrado.")
+            raise ValidationError(f"Usuario con ID {user_id} no encontrado.")
 
         # Validar todos los productos y calcular total ANTES de crear nada
         products_data = []
@@ -52,11 +53,11 @@ class PurchaseService:
             try:
                 product = Product.objects.get(id=item['product'], deleted_at__isnull=True)
             except Product.DoesNotExist:
-                raise ValueError(f"Producto con ID {item['product']} no encontrado.")
+                raise ValidationError(f"Producto con ID {item['product']} no encontrado.")
 
             # Validar que el producto pertenece al proveedor seleccionado
             if product.supplier_id != supplier.id:
-                raise ValueError(
+                raise ValidationError(
                     f"El producto '{product.name}' no pertenece al proveedor '{supplier.name}'."
                 )
 

@@ -1,11 +1,9 @@
 # views/sale_view.py
 from rest_framework import generics, status
 from rest_framework.permissions import IsAuthenticated
-from rest_framework.exceptions import PermissionDenied
 from rest_framework.response import Response
 from inventory_app.models.sale import Sale
 from inventory_app.serializers.sale_serializer import SaleCreateSerializer, SaleDetailSerializer
-from inventory_app.constants import UserRole
 
 class SaleListCreateView(generics.ListCreateAPIView):
     """
@@ -37,9 +35,6 @@ class SaleListCreateView(generics.ListCreateAPIView):
         Crea una venta con múltiples productos.
         La lógica de negocio se maneja en el SaleSerializer que delega a SaleService.
         """
-        if request.user.role not in [UserRole.ADMINISTRATOR, UserRole.SUPER_ADMIN, UserRole.USER]:
-            raise PermissionDenied("No tienes permiso para registrar ventas.")
-
         # Pasar el user_id al serializer a través del contexto
         serializer = self.get_serializer(
             data=request.data,
