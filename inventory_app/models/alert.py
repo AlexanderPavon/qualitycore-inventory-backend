@@ -2,15 +2,10 @@
 from django.db import models
 from .product import Product
 from inventory_app.managers import SoftDeleteManager
+from inventory_app.constants import AlertType
 
 class Alert(models.Model):
-    ALERT_TYPES = [
-        ('low_stock', 'Stock bajo'),
-        ('one_unit', 'Solo una unidad'),
-        ('out_of_stock', 'Sin stock'),
-    ]
-
-    type = models.CharField(max_length=20, choices=ALERT_TYPES, default='low_stock')
+    type = models.CharField(max_length=20, choices=AlertType.CHOICES, default=AlertType.LOW_STOCK)
     message = models.TextField()
     product = models.ForeignKey(Product, on_delete=models.CASCADE, related_name='alerts')
     created_at = models.DateTimeField(auto_now_add=True)

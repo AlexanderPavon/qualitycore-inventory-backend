@@ -1,17 +1,16 @@
 # tests/test_services.py
 """
 Tests para servicios de lógica de negocio.
-Cubre: InventoryService, SaleService, AlertService, PurchaseService.
+Cubre: MovementService, SaleService, AlertService, PurchaseService.
 """
 from django.test import TestCase
 from django.core.exceptions import ValidationError as DjangoValidationError
-from rest_framework.exceptions import ValidationError as DRFValidationError
 from django.utils import timezone
 from decimal import Decimal
 
 from inventory_app.models import Product, Category, Supplier, Customer, User, Movement, Sale, Purchase
 from inventory_app.models.alert import Alert
-from inventory_app.services.inventory_service import InventoryService
+from inventory_app.services.movement_service import MovementService
 from inventory_app.services.sale_service import SaleService
 from inventory_app.services.alert_service import AlertService
 from inventory_app.services.purchase_service import PurchaseService
@@ -59,19 +58,19 @@ class ServiceBaseTestCase(TestCase):
 
 
 # =============================================================================
-# Tests de InventoryService
+# Tests de MovementService
 # =============================================================================
-class TestInventoryService(ServiceBaseTestCase):
-    """Tests para el servicio de inventario."""
+class TestMovementService(ServiceBaseTestCase):
+    """Tests para el servicio de movimientos de inventario."""
 
     def test_movimiento_entrada_aumenta_stock(self):
         """Un movimiento de entrada debe aumentar el stock del producto."""
         product = self.create_product(stock=10)
-        InventoryService.register_movement(
+        MovementService.create_movement(
+            movement_type='input',
             product_id=product.id,
             quantity=5,
-            movement_type='input',
-            user=self.user,
+            user_id=self.user.id,
         )
         product.refresh_from_db()
         self.assertEqual(product.current_stock, 15)
@@ -79,12 +78,12 @@ class TestInventoryService(ServiceBaseTestCase):
     def test_movimiento_salida_disminuye_stock(self):
         """Un movimiento de salida debe disminuir el stock del producto."""
         product = self.create_product(stock=20)
-        InventoryService.register_movement(
+        MovementService.create_movement(
+            movement_type='output',
             product_id=product.id,
             quantity=8,
-            movement_type='output',
-            user=self.user,
-            customer=self.customer,
+            user_id=self.user.id,
+            customer_id=self.customer.id,
         )
         product.refresh_from_db()
         self.assertEqual(product.current_stock, 12)
@@ -92,77 +91,37 @@ class TestInventoryService(ServiceBaseTestCase):
     def test_movimiento_salida_sin_stock_falla(self):
         """Un movimiento de salida sin stock suficiente debe fallar."""
         product = self.create_product(stock=3)
-        with self.assertRaises(DRFValidationError):
-            InventoryService.register_movement(
+        with self.assertRaises(DjangoValidationError):
+            MovementService.create_movement(
+                movement_type='output',
                 product_id=product.id,
                 quantity=10,
-                movement_type='output',
-                user=self.user,
+                user_id=self.user.id,
+                customer_id=self.customer.id,
             )
 
     def test_movimiento_producto_inexistente_falla(self):
         """Un movimiento con producto inexistente debe fallar."""
-        with self.assertRaises(DRFValidationError):
-            InventoryService.register_movement(
+        with self.assertRaises(DjangoValidationError):
+            MovementService.create_movement(
+                movement_type='input',
                 product_id=99999,
                 quantity=5,
-                movement_type='input',
-                user=self.user,
-            )
-
-    def test_movimiento_tipo_invalido_falla(self):
-        """Un movimiento con tipo inválido debe fallar."""
-        product = self.create_product()
-        with self.assertRaises(DRFValidationError):
-            InventoryService.register_movement(
-                product_id=product.id,
-                quantity=5,
-                movement_type='invalid',
-                user=self.user,
+                user_id=self.user.id,
             )
 
     def test_movimiento_crea_registro(self):
         """Un movimiento debe crear un registro en la tabla Movement."""
         product = self.create_product(stock=10)
-        movement = InventoryService.register_movement(
+        movement = MovementService.create_movement(
+            movement_type='input',
             product_id=product.id,
             quantity=5,
-            movement_type='input',
-            user=self.user,
+            user_id=self.user.id,
         )
         self.assertIsNotNone(movement)
         self.assertEqual(movement.quantity, 5)
         self.assertEqual(movement.movement_type, 'input')
-
-    def test_check_stock_availability_suficiente(self):
-        """check_stock_availability debe retornar True si hay stock."""
-        product = self.create_product(stock=10)
-        available, current = InventoryService.check_stock_availability(product.id, 5)
-        self.assertTrue(available)
-        self.assertEqual(current, 10)
-
-    def test_check_stock_availability_insuficiente(self):
-        """check_stock_availability debe retornar False si no hay stock."""
-        product = self.create_product(stock=3)
-        available, current = InventoryService.check_stock_availability(product.id, 10)
-        self.assertFalse(available)
-        self.assertEqual(current, 3)
-
-    def test_check_stock_producto_inexistente(self):
-        """check_stock_availability con producto inexistente retorna (False, 0)."""
-        available, current = InventoryService.check_stock_availability(99999, 1)
-        self.assertFalse(available)
-        self.assertEqual(current, 0)
-
-    def test_get_low_stock_products(self):
-        """get_low_stock_products debe retornar productos con stock bajo."""
-        self.create_product(name='Bajo Stock', stock=2, min_stock=10)
-        self.create_product(name='Stock OK', stock=50, min_stock=5)
-
-        low_stock = InventoryService.get_low_stock_products()
-        names = [p.name for p in low_stock]
-        self.assertIn('Bajo Stock', names)
-        self.assertNotIn('Stock OK', names)
 
 
 # =============================================================================

@@ -7,6 +7,7 @@ from decimal import Decimal
 from inventory_app.models.sale import Sale
 from inventory_app.models.movement import Movement
 from inventory_app.services import SaleService
+from inventory_app.serializers.mixins import InvoiceMovementsMixin
 
 class SaleItemSerializer(serializers.Serializer):
     """
@@ -58,7 +59,7 @@ class SaleCreateSerializer(serializers.Serializer):
             # Convertir ValidationError de Django a DRF
             raise serializers.ValidationError(str(e))
 
-class SaleDetailSerializer(serializers.ModelSerializer):
+class SaleDetailSerializer(InvoiceMovementsMixin, serializers.ModelSerializer):
     """
     Serializer para mostrar detalles de una venta.
     """
@@ -72,16 +73,3 @@ class SaleDetailSerializer(serializers.ModelSerializer):
             'id', 'customer', 'customer_name', 'user', 'user_name',
             'date', 'total', 'movements', 'created_at'
         ]
-
-    def get_movements(self, obj):
-        """
-        Retorna los movimientos asociados a esta venta.
-        """
-        movements = obj.movements.all()
-        return [{
-            'id': m.id,
-            'product_name': m.product.name,
-            'quantity': m.quantity,
-            'price': m.price,  # Usar precio histórico del movimiento
-            'subtotal': m.price * m.quantity
-        } for m in movements]

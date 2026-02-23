@@ -8,6 +8,7 @@ import logging
 from django.utils import timezone
 from inventory_app.models.alert import Alert
 from inventory_app.models.product import Product
+from inventory_app.constants import AlertType
 
 logger = logging.getLogger(__name__)
 
@@ -17,11 +18,6 @@ class AlertService:
     Servicio para gestionar alertas de stock de productos.
     Centraliza la lógica de creación, actualización y eliminación de alertas.
     """
-
-    # Tipos de alertas (constantes para evitar magic strings)
-    ALERT_TYPE_OUT_OF_STOCK = "out_of_stock"
-    ALERT_TYPE_ONE_UNIT = "one_unit"
-    ALERT_TYPE_LOW_STOCK = "low_stock"
 
     @staticmethod
     def update_stock_alerts(product: Product) -> None:
@@ -50,13 +46,13 @@ class AlertService:
 
         # Determinar el tipo de alerta y mensaje según el nivel de stock
         if product.current_stock == 0:
-            alert_type = AlertService.ALERT_TYPE_OUT_OF_STOCK
+            alert_type = AlertType.OUT_OF_STOCK
             message = f"El producto '{product.name}' está agotado."
         elif product.current_stock == 1:
-            alert_type = AlertService.ALERT_TYPE_ONE_UNIT
+            alert_type = AlertType.ONE_UNIT
             message = f"Solo queda 1 unidad del producto '{product.name}'."
         else:
-            alert_type = AlertService.ALERT_TYPE_LOW_STOCK
+            alert_type = AlertType.LOW_STOCK
             message = (
                 f"El producto '{product.name}' está por debajo del stock mínimo "
                 f"({product.minimum_stock}). Stock actual: {product.current_stock}"

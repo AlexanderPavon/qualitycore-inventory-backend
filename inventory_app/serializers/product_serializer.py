@@ -2,6 +2,7 @@
 import logging
 from rest_framework import serializers
 from inventory_app.models.product import Product
+from inventory_app.constants import ProductStatus
 
 logger = logging.getLogger(__name__)
 
@@ -72,14 +73,8 @@ class ProductSerializer(serializers.ModelSerializer):
        }
 
    def get_is_active(self, obj):
-       """
-       Convierte el campo status (string) a is_active (booleano).
-       Cualquier status que no sea 'Agotado' o 'Inactivo' se considera activo.
-       """
-       if not obj.status:
-           return False
-       status_lower = obj.status.lower()
-       return status_lower not in ['agotado', 'inactivo', 'out_of_stock', 'inactive']
+       """Convierte el campo status a booleano."""
+       return obj.status == ProductStatus.ACTIVE
 
    def get_image_url(self, obj):
        if not obj.image:

@@ -21,7 +21,7 @@ class AlertUpdateView(APIView):
         try:
             alert = Alert.objects.get(pk=pk, deleted_at__isnull=True)
         except Alert.DoesNotExist:
-            return Response(status=status.HTTP_404_NOT_FOUND)
+            return Response({'detail': 'Alerta no encontrada.'}, status=status.HTTP_404_NOT_FOUND)
 
         alert.deleted_at = timezone.now()
         alert.save()

@@ -56,6 +56,26 @@ class CustomerSerializer(serializers.ModelSerializer):
             }
         }
 
+    def _check_unique(self, field, value, error_msg):
+        """Verifica unicidad solo entre registros activos (no eliminados)."""
+        qs = Customer.objects.filter(**{field: value}, deleted_at__isnull=True)
+        if self.instance:
+            qs = qs.exclude(id=self.instance.id)
+        if qs.exists():
+            raise serializers.ValidationError(error_msg)
+
+    def validate_email(self, value):
+        self._check_unique('email', value.lower(), 'Ya existe un cliente con este correo electrónico.')
+        return value.lower()
+
+    def validate_document(self, value):
+        self._check_unique('document', value, 'Ya existe un cliente con este documento.')
+        return value
+
+    def validate_phone(self, value):
+        self._check_unique('phone', value, 'Ya existe un cliente con este teléfono.')
+        return value
+
     def validate(self, data):
         """
         Validación a nivel de objeto para verificar el documento según el tipo.

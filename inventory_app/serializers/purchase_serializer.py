@@ -7,6 +7,7 @@ from decimal import Decimal
 from inventory_app.models.purchase import Purchase
 from inventory_app.models.movement import Movement
 from inventory_app.services import PurchaseService
+from inventory_app.serializers.mixins import InvoiceMovementsMixin
 
 class PurchaseItemSerializer(serializers.Serializer):
     """
@@ -58,7 +59,7 @@ class PurchaseCreateSerializer(serializers.Serializer):
             # Convertir ValidationError de Django a DRF
             raise serializers.ValidationError(str(e))
 
-class PurchaseDetailSerializer(serializers.ModelSerializer):
+class PurchaseDetailSerializer(InvoiceMovementsMixin, serializers.ModelSerializer):
     """
     Serializer para mostrar detalles de una compra.
     """
@@ -72,16 +73,3 @@ class PurchaseDetailSerializer(serializers.ModelSerializer):
             'id', 'supplier', 'supplier_name', 'user', 'user_name',
             'date', 'total', 'movements', 'created_at'
         ]
-
-    def get_movements(self, obj):
-        """
-        Retorna los movimientos asociados a esta compra.
-        """
-        movements = obj.movements.all()
-        return [{
-            'id': m.id,
-            'product_name': m.product.name,
-            'quantity': m.quantity,
-            'price': m.price,  # Usar precio histórico del movimiento
-            'subtotal': m.price * m.quantity
-        } for m in movements]

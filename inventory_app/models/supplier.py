@@ -1,8 +1,14 @@
 # models/supplier.py
 from django.db import models
+from django.db.models import Q
 from django.core.validators import RegexValidator, EmailValidator
 from inventory_app.managers import SoftDeleteManager
 from inventory_app.constants import ValidationMessages
+from inventory_app.validators.ecuadorian_validators import (
+    validate_ecuadorian_cedula,
+    validate_ecuadorian_ruc,
+    validate_passport,
+)
 
 class Supplier(models.Model):
     DOCUMENT_TYPE_CHOICES = [
@@ -11,14 +17,10 @@ class Supplier(models.Model):
         ('passport', 'Pasaporte'),
     ]
 
-    name = models.CharField(max_length=100)
+    name = models.CharField(max_length=100, db_index=True)
 
     email = models.EmailField(
         max_length=100,
-        unique=True,
-        error_messages={
-            'unique': 'Ya existe un proveedor con este correo electrónico.'
-        },
         validators=[
             EmailValidator(message="El correo electrónico no es válido.")
         ]
@@ -30,22 +32,12 @@ class Supplier(models.Model):
         default='ruc'
     )
 
-    tax_id = models.CharField(
-        max_length=13,
-        unique=True,
-        error_messages={
-            'unique': 'Ya existe un proveedor con este documento.'
-        }
-    )
+    tax_id = models.CharField(max_length=13)
 
     phone = models.CharField(
-        max_length=15,
-        unique=True,
+        max_length=10,
         blank=False,
         null=False,
-        error_messages={
-            'unique': 'Ya existe un proveedor con este teléfono.'
-        },
         validators=[
             RegexValidator(
                 regex=ValidationMessages.PHONE_REGEX,
@@ -63,6 +55,38 @@ class Supplier(models.Model):
     # Managers
     objects = SoftDeleteManager()  # Filtra automáticamente registros eliminados
     all_objects = models.Manager()  # Acceso a todos los registros
+
+    class Meta:
+        constraints = [
+            models.UniqueConstraint(
+                fields=['email'],
+                condition=Q(deleted_at__isnull=True),
+                name='unique_active_supplier_email'
+            ),
+            models.UniqueConstraint(
+                fields=['tax_id'],
+                condition=Q(deleted_at__isnull=True),
+                name='unique_active_supplier_tax_id'
+            ),
+            models.UniqueConstraint(
+                fields=['phone'],
+                condition=Q(deleted_at__isnull=True),
+                name='unique_active_supplier_phone'
+            ),
+        ]
+
+    def clean(self):
+        if self.document_type and self.tax_id:
+            if self.document_type == 'cedula':
+                validate_ecuadorian_cedula(self.tax_id)
+            elif self.document_type == 'ruc':
+                validate_ecuadorian_ruc(self.tax_id)
+            elif self.document_type == 'passport':
+                validate_passport(self.tax_id)
+
+    def save(self, *args, **kwargs):
+        self.full_clean()
+        super().save(*args, **kwargs)
 
     def __str__(self):
         return self.name

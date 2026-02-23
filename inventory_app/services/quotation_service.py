@@ -9,7 +9,7 @@ from decimal import Decimal
 from django.core.exceptions import ValidationError
 from django.db import transaction
 
-from inventory_app.models import Quotation, QuotedProduct
+from inventory_app.models import Quotation, QuotedProduct, Product
 from inventory_app.constants import BusinessRules, ValidationMessages
 
 
@@ -104,6 +104,13 @@ class QuotationService:
         # Validar que haya al menos un producto
         if not products or len(products) == 0:
             raise ValidationError(ValidationMessages.QUOTATION_MIN_PRODUCTS)
+
+        # Validar que todos los productos existan en la BD
+        product_ids = [p.get('product_id') for p in products if p.get('product_id')]
+        existing = set(Product.objects.filter(id__in=product_ids).values_list('id', flat=True))
+        missing = [pid for pid in product_ids if pid not in existing]
+        if missing:
+            raise ValidationError(f"Productos no encontrados: {', '.join(str(id) for id in missing)}")
 
         # Validar cada producto
         for idx, product_data in enumerate(products, start=1):

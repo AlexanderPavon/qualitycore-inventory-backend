@@ -4,16 +4,13 @@ from rest_framework import generics, status
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 from inventory_app.models.quotation import Quotation
-from inventory_app.models.report import Report
 from inventory_app.serializers.quotation_serializer import QuotationSerializer
 from inventory_app.tasks import generate_quotation_pdf
 from inventory_app.constants import UserRole
-from datetime import datetime
-import os
-from decimal import Decimal
-from django.conf import settings
-from django.http import FileResponse, Http404
+from django.core.cache import cache
 import logging
+
+TASK_OWNER_TIMEOUT = 3600  # 1 hora, igual que CELERY_RESULT_EXPIRES
 
 logger = logging.getLogger(__name__)
 
@@ -22,22 +19,9 @@ class QuotationCreateView(APIView):
 
     def post(self, request):
         data = request.data.copy()
-        products = data.pop('quoted_products')
-
-        try:
-            subtotal = sum(Decimal(p['unit_price']) * int(p['quantity']) for p in products)
-        except (KeyError, ValueError, TypeError) as e:
-            return Response({"error": f"Datos inválidos en productos: {str(e)}"}, status=status.HTTP_400_BAD_REQUEST)
-
-        vat = round(subtotal * Decimal('0.15'), 2)
-        total = subtotal + vat
-
-        data['subtotal'] = subtotal
-        data['tax'] = vat
-        data['total'] = total
         data['user'] = request.user.id
 
-        serializer = QuotationSerializer(data={**data, 'quoted_products': products})
+        serializer = QuotationSerializer(data=data)
         if serializer.is_valid():
             serializer.save()
             return Response({'message': 'Cotización guardada correctamente', 'quotation': serializer.data})
@@ -81,12 +65,15 @@ class QuotationPDFView(APIView):
             Quotation.objects.get(id=quotation_id, deleted_at__isnull=True)
         except Quotation.DoesNotExist:
             return Response(
-                {"error": "Cotización no encontrada"},
+                {"detail": "Cotización no encontrada"},
                 status=status.HTTP_404_NOT_FOUND
             )
 
         # Lanzar tarea asíncrona
         task = generate_quotation_pdf.delay(quotation_id, request.user.id)
+
+        # Registrar ownership: solo el creador puede consultar el estado
+        cache.set(f"task_owner:{task.id}", request.user.id, timeout=TASK_OWNER_TIMEOUT)
 
         logger.info(f"Task de generación de PDF iniciada: {task.id} para cotización {quotation_id}")
 
@@ -106,14 +93,16 @@ class QuotationPDFStatusView(APIView):
     def get(self, request, task_id):
         """
         Consulta el estado de la tarea.
-
-        Returns:
-            {
-                "state": "PENDING|STARTED|SUCCESS|FAILURE",
-                "result": "ruta/al/archivo.pdf" (si SUCCESS),
-                "error": "mensaje de error" (si FAILURE)
-            }
+        Solo el usuario que creó la tarea puede consultar su estado.
         """
+        # Validar ownership
+        owner_id = cache.get(f"task_owner:{task_id}")
+        if owner_id is None or owner_id != request.user.id:
+            return Response(
+                {"detail": "Tarea no encontrada."},
+                status=status.HTTP_404_NOT_FOUND
+            )
+
         from celery.result import AsyncResult
 
         task = AsyncResult(task_id)

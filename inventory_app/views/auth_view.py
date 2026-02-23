@@ -30,21 +30,44 @@ class LoginView(APIView):
         user = authenticate(request, username=email, password=password)
         if user:
             if not user.is_active:
-                return Response({'message': 'El usuario está inactivo. Contacta al administrador.'}, status=status.HTTP_403_FORBIDDEN)
+                return Response({'detail': 'El usuario está inactivo. Contacta al administrador.'}, status=status.HTTP_403_FORBIDDEN)
 
             # Generar tokens JWT
             refresh = RefreshToken.for_user(user)
             serializer = UserSerializer(user)
 
-            return Response({
+            response = Response({
                 'message': 'Inicio de sesión exitoso',
                 'user': serializer.data,
-                'tokens': {
-                    'access': str(refresh.access_token),
-                    'refresh': str(refresh),
-                }
             })
-        return Response({'message': 'Credenciales incorrectas'}, status=status.HTTP_401_UNAUTHORIZED)
+
+            # Tokens como cookies httpOnly (no accesibles por JavaScript)
+            is_secure = getattr(settings, 'SESSION_COOKIE_SECURE', False)
+            same_site = getattr(settings, 'SESSION_COOKIE_SAMESITE', 'Lax')
+            access_max_age = int(settings.SIMPLE_JWT['ACCESS_TOKEN_LIFETIME'].total_seconds())
+            refresh_max_age = int(settings.SIMPLE_JWT['REFRESH_TOKEN_LIFETIME'].total_seconds())
+
+            response.set_cookie(
+                key="access_token",
+                value=str(refresh.access_token),
+                max_age=access_max_age,
+                httponly=True,
+                secure=is_secure,
+                samesite=same_site,
+                path="/",
+            )
+            response.set_cookie(
+                key="refresh_token",
+                value=str(refresh),
+                max_age=refresh_max_age,
+                httponly=True,
+                secure=is_secure,
+                samesite=same_site,
+                path="/api/token/refresh/",
+            )
+
+            return response
+        return Response({'detail': 'Credenciales incorrectas'}, status=status.HTTP_401_UNAUTHORIZED)
 
 # --- Forgot Password ---
 class ForgotPasswordView(APIView):
@@ -93,7 +116,7 @@ class ResetPasswordView(APIView):
 
         # Validar que se proporcionó la contraseña
         if not new_password:
-            return Response({'message': 'La nueva contraseña es requerida'}, status=status.HTTP_400_BAD_REQUEST)
+            return Response({'detail': 'La nueva contraseña es requerida'}, status=status.HTTP_400_BAD_REQUEST)
 
         try:
             user = User.objects.get(pk=uid)
@@ -102,15 +125,15 @@ class ResetPasswordView(APIView):
                 try:
                     validate_password(new_password, user=user)
                 except ValidationError as e:
-                    return Response({'message': list(e.messages)}, status=status.HTTP_400_BAD_REQUEST)
+                    return Response({'detail': list(e.messages)}, status=status.HTTP_400_BAD_REQUEST)
 
                 user.set_password(new_password)
                 user.save()
                 return Response({'message': 'Contraseña actualizada correctamente'})
             else:
-                return Response({'message': 'El token es inválido o ha expirado'}, status=status.HTTP_400_BAD_REQUEST)
+                return Response({'detail': 'El token es inválido o ha expirado'}, status=status.HTTP_400_BAD_REQUEST)
         except User.DoesNotExist:
-            return Response({'message': 'Usuario no encontrado'}, status=status.HTTP_400_BAD_REQUEST)
+            return Response({'detail': 'Usuario no encontrado'}, status=status.HTTP_400_BAD_REQUEST)
 
 # --- Change Password ---
 class ChangePasswordView(APIView):
@@ -124,20 +147,43 @@ class ChangePasswordView(APIView):
 
         # Validar que se proporcionaron ambas contraseñas
         if not old_password:
-            return Response({'error': 'La contraseña actual es requerida.'}, status=status.HTTP_400_BAD_REQUEST)
+            return Response({'detail': 'La contraseña actual es requerida.'}, status=status.HTTP_400_BAD_REQUEST)
         if not new_password:
-            return Response({'error': 'La nueva contraseña es requerida.'}, status=status.HTTP_400_BAD_REQUEST)
+            return Response({'detail': 'La nueva contraseña es requerida.'}, status=status.HTTP_400_BAD_REQUEST)
 
         # Verificar la contraseña actual
         if not user.check_password(old_password):
-            return Response({'error': 'La contraseña actual es incorrecta.'}, status=status.HTTP_400_BAD_REQUEST)
+            return Response({'detail': 'La contraseña actual es incorrecta.'}, status=status.HTTP_400_BAD_REQUEST)
 
         # Validar la nueva contraseña con los validadores de Django
         try:
             validate_password(new_password, user=user)
         except ValidationError as e:
-            return Response({'error': list(e.messages)}, status=status.HTTP_400_BAD_REQUEST)
+            return Response({'detail': list(e.messages)}, status=status.HTTP_400_BAD_REQUEST)
 
         user.set_password(new_password)
         user.save()
         return Response({'message': 'Contraseña cambiada exitosamente'}, status=status.HTTP_200_OK)
+
+
+# --- Logout (borrar cookies httpOnly) ---
+class LogoutView(APIView):
+    authentication_classes = []
+    permission_classes = []
+
+    def post(self, request):
+        is_secure = getattr(settings, 'SESSION_COOKIE_SECURE', False)
+        same_site = getattr(settings, 'SESSION_COOKIE_SAMESITE', 'Lax')
+
+        response = Response({'message': 'Sesión cerrada exitosamente'})
+        response.delete_cookie(
+            key="access_token",
+            path="/",
+            samesite=same_site,
+        )
+        response.delete_cookie(
+            key="refresh_token",
+            path="/api/token/refresh/",
+            samesite=same_site,
+        )
+        return response

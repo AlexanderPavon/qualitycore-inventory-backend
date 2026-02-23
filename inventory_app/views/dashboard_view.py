@@ -2,13 +2,17 @@
 from rest_framework.views import APIView
 from rest_framework.response import Response
 from rest_framework.permissions import IsAuthenticated
+from django.utils.decorators import method_decorator
+from django.views.decorators.cache import cache_page
 from inventory_app.models import Product, Customer, Movement, Quotation
 from inventory_app.models.alert import Alert
 from django.db.models import Count, Sum, Q
 
+
 class DashboardSummaryView(APIView):
     permission_classes = [IsAuthenticated]
 
+    @method_decorator(cache_page(60))  # Caché de 60 segundos
     def get(self, request):
         total_products = Product.objects.filter(deleted_at__isnull=True).count()
         total_customers = Customer.objects.filter(deleted_at__isnull=True).count()

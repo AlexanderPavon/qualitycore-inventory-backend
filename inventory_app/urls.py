@@ -1,18 +1,17 @@
 from django.urls import path
-from rest_framework_simplejwt.views import TokenRefreshView
-
 from inventory_app.views.auth_view import (
-    LoginView, ForgotPasswordView, ResetPasswordView, ChangePasswordView
+    LoginView, ForgotPasswordView, ResetPasswordView, ChangePasswordView, LogoutView
 )
+from inventory_app.views.token_refresh_view import CookieTokenRefreshView
 from inventory_app.views.user_view import UserListCreateView, UserDetailView
 from inventory_app.views.customer_view import CustomerListCreateView, CustomerDetailView
 from inventory_app.views.supplier_view import SupplierListCreateView, SupplierDetailView
-from inventory_app.views.product_view import ProductListCreateView, ProductDetailView
+from inventory_app.views.product_view import ProductListCreateView, ProductDetailView, ProductStockCheckView
 from inventory_app.views.category_view import CategoryListCreateView, CategoryDetailView
-from inventory_app.views.movement_view import MovementListCreateView
+from inventory_app.views.movement_view import MovementListCreateView, AdjustmentCreateView, CorrectionCreateView
 from inventory_app.views.sale_view import SaleListCreateView, SaleDetailView
 from inventory_app.views.purchase_view import PurchaseListCreateView, PurchaseDetailView
-from inventory_app.views.report_view import ReportListView, ReportGeneratePDFView, ReportDownloadView
+from inventory_app.views.report_view import ReportListView, ReportGeneratePDFView, ReportDownloadView, ReportStatusView
 from inventory_app.views.dashboard_view import DashboardSummaryView
 
 from inventory_app.views.quotation_view import (
@@ -24,10 +23,12 @@ from inventory_app.views.alert_view import AlertListView, AlertUpdateView
 from inventory_app.views.config_view import ConfigView
 
 from inventory_app.views.csrf_view import csrf_ready
+from inventory_app.views.health_view import health_check
 urlpatterns = [
     # Auth
     path('login/', LoginView.as_view()),
-    path('token/refresh/', TokenRefreshView.as_view(), name='token_refresh'),
+    path('logout/', LogoutView.as_view()),
+    path('token/refresh/', CookieTokenRefreshView.as_view(), name='token_refresh'),
     path('forgot-password/', ForgotPasswordView.as_view()),
     path('reset-password/', ResetPasswordView.as_view()),
     path('change-password/', ChangePasswordView.as_view()),
@@ -47,6 +48,7 @@ urlpatterns = [
     # Products
     path('products/', ProductListCreateView.as_view()),
     path('products/<int:pk>/', ProductDetailView.as_view()),
+    path('products/check-stock/', ProductStockCheckView.as_view()),
 
     # Categories
     path('categories/', CategoryListCreateView.as_view()),
@@ -54,6 +56,8 @@ urlpatterns = [
 
     # Movements
     path('movements/', MovementListCreateView.as_view()),
+    path('movements/adjustments/', AdjustmentCreateView.as_view()),
+    path('movements/<int:pk>/correct/', CorrectionCreateView.as_view()),
 
     # Sales
     path('sales/', SaleListCreateView.as_view()),
@@ -66,6 +70,7 @@ urlpatterns = [
     # Reports
     path('reports/', ReportListView.as_view()),
     path('reports/generate/', ReportGeneratePDFView.as_view()),
+    path('reports/status/<str:task_id>/', ReportStatusView.as_view()),
     path('reports/download/<int:pk>/', ReportDownloadView.as_view(), name='report-download'),
 
     # Quotations
@@ -88,4 +93,6 @@ urlpatterns = [
 
     path('csrf/', csrf_ready),
 
+    # Health check (para orquestadores como Railway, Docker, etc.)
+    path('health/', health_check),
 ]

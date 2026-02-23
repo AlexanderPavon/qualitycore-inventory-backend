@@ -31,3 +31,7 @@ class Purchase(models.Model):
 
     class Meta:
         ordering = ['-date']
+        indexes = [
+            models.Index(fields=['-date']),
+            models.Index(fields=['supplier', '-date']),
+        ]

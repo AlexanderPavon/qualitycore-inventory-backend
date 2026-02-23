@@ -1,4 +1,4 @@
 # middleware/__init__.py
-from .audit_middleware import AuditMiddleware
+from .audit_middleware import AuditMiddleware, get_current_request
 
-__all__ = ['AuditMiddleware']
+__all__ = ['AuditMiddleware', 'get_current_request']

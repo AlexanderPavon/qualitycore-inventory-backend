@@ -7,16 +7,59 @@ from inventory_app.serializers.purchase_serializer import (
     PurchaseDetailSerializer
 )
 from inventory_app.permissions import IsAdminForWrite
+from inventory_app.throttles import WriteOperationThrottle
 
 
 class PurchaseListCreateView(generics.ListCreateAPIView):
     """
-    Vista para listar y crear compras.
-    GET: Lista todas las compras
+    Vista para listar y crear compras con paginación y filtros server-side.
+    GET: Lista compras paginadas (20 por página por defecto)
     POST: Crea una nueva compra con múltiples productos
+
+    Query params:
+        search: Filtra por nombre de proveedor o usuario
+        start_date: Fecha inicio (YYYY-MM-DD)
+        end_date: Fecha fin (YYYY-MM-DD)
+        page: Número de página
     """
-    queryset = Purchase.objects.filter(deleted_at__isnull=True).prefetch_related('movements__product')
     permission_classes = [IsAdminForWrite]
+    throttle_classes = [WriteOperationThrottle]
+
+    def get_queryset(self):
+        qs = Purchase.objects.filter(deleted_at__isnull=True).select_related(
+            'supplier',
+            'user'
+        ).prefetch_related('movements__product').order_by("-date")
+
+        start_date = self.request.query_params.get('start_date')
+        end_date = self.request.query_params.get('end_date')
+        if start_date:
+            qs = qs.filter(date__date__gte=start_date)
+        if end_date:
+            qs = qs.filter(date__date__lte=end_date)
+
+        return qs
+
+    def list(self, request, *args, **kwargs):
+        queryset = self.filter_queryset(self.get_queryset())
+
+        # Sin paginación cuando se busca (client-side filtering necesita todos los registros)
+        if request.query_params.get('no_page') == 'true':
+            serializer = self.get_serializer(queryset, many=True)
+            return Response({
+                'count': queryset.count(),
+                'next': None,
+                'previous': None,
+                'results': serializer.data
+            })
+
+        page = self.paginate_queryset(queryset)
+        if page is not None:
+            serializer = self.get_serializer(page, many=True)
+            return self.get_paginated_response(serializer.data)
+
+        serializer = self.get_serializer(queryset, many=True)
+        return Response(serializer.data)
 
     def get_serializer_class(self):
         if self.request.method == 'POST':
@@ -24,6 +67,10 @@ class PurchaseListCreateView(generics.ListCreateAPIView):
         return PurchaseDetailSerializer
 
     def create(self, request, *args, **kwargs):
+        """
+        Crea una compra con múltiples productos.
+        La lógica de negocio se maneja en el PurchaseSerializer que delega a PurchaseService.
+        """
         # Pasar user_id al contexto del serializer
         serializer = self.get_serializer(
             data=request.data,
@@ -32,9 +79,12 @@ class PurchaseListCreateView(generics.ListCreateAPIView):
         serializer.is_valid(raise_exception=True)
         purchase = serializer.save()
 
-        # Retornar con el serializer de detalle
+        # Retornar respuesta con detalles completos
         detail_serializer = PurchaseDetailSerializer(purchase)
-        return Response(detail_serializer.data, status=status.HTTP_201_CREATED)
+        return Response({
+            'message': 'Compra registrada correctamente',
+            'purchase': detail_serializer.data
+        }, status=status.HTTP_201_CREATED)
 
 
 class PurchaseDetailView(generics.RetrieveAPIView):

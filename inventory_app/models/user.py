@@ -1,5 +1,6 @@
 # models/user.py
 from django.db import models
+from django.db.models import Q
 from django.contrib.auth.models import AbstractUser, BaseUserManager
 from django.core.validators import RegexValidator
 from inventory_app.managers.soft_delete_manager import SoftDeleteQuerySet
@@ -44,26 +45,18 @@ class User(AbstractUser):
     username = None
     email = models.EmailField(
         'email address',
-        unique=True,
         db_index=True,
-        error_messages={
-            'unique': 'Ya existe un usuario con este correo electrónico.'
-        }
-    )  # Índice explícito para búsquedas
-    name = models.CharField(max_length=100)
+    )
+    name = models.CharField(max_length=100, db_index=True)
 
     # Usar constantes centralizadas
     ROLE_CHOICES = UserRole.CHOICES
     role = models.CharField(max_length=50, choices=ROLE_CHOICES)
 
     phone = models.CharField(
-        max_length=15,
-        unique=True,
+        max_length=10,
         blank=False,
         null=False,
-        error_messages={
-            'unique': 'Ya existe un usuario con este teléfono.'
-        },
         validators=[
             RegexValidator(
                 regex=ValidationMessages.PHONE_REGEX,
@@ -81,6 +74,20 @@ class User(AbstractUser):
 
     objects = UserManager()  # Filtra automáticamente usuarios eliminados
     all_objects = models.Manager()  # Acceso a todos los usuarios (incluidos eliminados)
+
+    class Meta:
+        constraints = [
+            models.UniqueConstraint(
+                fields=['email'],
+                condition=Q(deleted_at__isnull=True),
+                name='unique_active_user_email'
+            ),
+            models.UniqueConstraint(
+                fields=['phone'],
+                condition=Q(deleted_at__isnull=True),
+                name='unique_active_user_phone'
+            ),
+        ]
 
     def __str__(self):
         return self.email

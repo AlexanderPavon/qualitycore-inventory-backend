@@ -15,6 +15,10 @@ SECRET_KEY = env('SECRET_KEY')
 # Lista con fallback seguro si la variable no está configurada
 ALLOWED_HOSTS = env.list('ALLOWED_HOSTS', default=['localhost', '127.0.0.1'])
 
+# Silenciar auth.E003: User.email usa UniqueConstraint condicional (soft delete)
+# en vez de unique=True, lo cual es intencional para permitir reusar emails de usuarios eliminados.
+SILENCED_SYSTEM_CHECKS = ['auth.E003', 'auth.W004']
+
 # --- Installed apps ---
 INSTALLED_APPS = [
     'django.contrib.admin',
@@ -27,6 +31,7 @@ INSTALLED_APPS = [
     # Terceros
     'rest_framework',
     'corsheaders',
+    'drf_spectacular',
 
     # App propia
     'inventory_app.apps.InventoryAppConfig',
@@ -45,7 +50,7 @@ AUTHENTICATION_BACKENDS = [
 REST_FRAMEWORK = {
     # Autenticación JWT como método principal
     'DEFAULT_AUTHENTICATION_CLASSES': [
-        'rest_framework_simplejwt.authentication.JWTAuthentication',
+        'inventory_app.authentication.CookieJWTAuthentication',  # JWT via httpOnly cookies
         'rest_framework.authentication.SessionAuthentication',  # Mantener para admin
     ],
 
@@ -56,6 +61,9 @@ REST_FRAMEWORK = {
     # Permitir a los clientes especificar el tamaño de página con ?page_size=100
     'PAGE_SIZE_QUERY_PARAM': 'page_size',
     'MAX_PAGE_SIZE': 50,  # Máximo permitido
+
+    # Esquema de API (Swagger/OpenAPI)
+    'DEFAULT_SCHEMA_CLASS': 'drf_spectacular.openapi.AutoSchema',
 
     # Custom exception handler para remover prefijos de campo en errores
     'EXCEPTION_HANDLER': 'inventory_app.utils.exception_handler.custom_exception_handler',
@@ -165,6 +173,9 @@ STATIC_ROOT = BASE_DIR / 'staticfiles'
 MEDIA_URL = '/media/'
 MEDIA_ROOT = BASE_DIR / 'media'
 
+# --- Upload limits ---
+DATA_UPLOAD_MAX_MEMORY_SIZE = 10 * 1024 * 1024  # 10 MB máximo por request
+
 # --- Primary key field type ---
 DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
 
@@ -224,8 +235,18 @@ from inventory_app.logging_config import LOGGING_CONFIG as LOGGING_DICT
 
 LOGGING = LOGGING_DICT
 
-# --- Celery configuration ---
+# --- Cache (uses same Redis as Celery) ---
 REDIS_URL = env('REDIS_URL', default=env('CELERY_BROKER_URL', default='redis://localhost:6379/0'))
+
+CACHES = {
+    'default': {
+        'BACKEND': 'django.core.cache.backends.redis.RedisCache',
+        'LOCATION': REDIS_URL,
+        'KEY_PREFIX': 'qc',
+    }
+}
+
+# --- Celery configuration ---
 CELERY_BROKER_URL = REDIS_URL
 CELERY_RESULT_BACKEND = REDIS_URL
 
@@ -237,6 +258,14 @@ CELERY_TIMEZONE = TIME_ZONE
 CELERY_TASK_TRACK_STARTED = True
 CELERY_TASK_TIME_LIMIT = 30 * 60  # 30 minutos máximo por tarea
 CELERY_RESULT_EXPIRES = 3600  # Los resultados expiran después de 1 hora
+
+# --- API Documentation (Swagger/OpenAPI) ---
+SPECTACULAR_SETTINGS = {
+    'TITLE': 'QualityCore Inventory API',
+    'DESCRIPTION': 'API del sistema de inventario QualityCore',
+    'VERSION': '1.0.0',
+    'SERVE_INCLUDE_SCHEMA': False,
+}
 
 # --- JWT Configuration ---
 from datetime import timedelta

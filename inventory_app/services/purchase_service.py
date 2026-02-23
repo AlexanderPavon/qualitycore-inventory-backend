@@ -1,114 +1,58 @@
 # services/purchase_service.py
-from django.db import transaction
-from django.utils import timezone
+"""
+Servicio para gestionar lógica de negocio de compras.
+Hereda la lógica compartida de TransactionServiceBase.
+"""
+
 from django.core.exceptions import ValidationError
-from decimal import Decimal
 
-from inventory_app.models import Purchase, Movement, Product, Supplier, User
+from inventory_app.models import Purchase, Supplier
 from inventory_app.constants import MovementType
-from inventory_app.validators import StockValidator
-from inventory_app.services.alert_service import AlertService
+from inventory_app.services.transaction_base import TransactionServiceBase
 
 
-class PurchaseService:
-    """
-    Servicio para gestionar la creación de compras (entradas de inventario).
-    Similar a SaleService pero para entradas.
-    """
+class PurchaseService(TransactionServiceBase):
 
     @staticmethod
     def create_purchase(supplier_id, user_id, items):
-        """
-        Crea una compra con múltiples productos.
-        La fecha se establece automáticamente con la hora exacta del servidor.
+        return PurchaseService.create(supplier_id, user_id, items)
 
-        Args:
-            supplier_id: ID del proveedor
-            user_id: ID del usuario que registra la compra
-            items: Lista de dicts con {product: id, quantity: qty}
-
-        Returns:
-            Purchase: La compra creada
-
-        Raises:
-            ValidationError: Si hay problemas de validación
-        """
-        # Validar que el proveedor existe
+    @classmethod
+    def _validate_entity(cls, entity_id):
         try:
-            supplier = Supplier.objects.get(id=supplier_id, deleted_at__isnull=True)
+            return Supplier.objects.get(id=entity_id, deleted_at__isnull=True)
         except Supplier.DoesNotExist:
-            raise ValidationError(f"Proveedor con ID {supplier_id} no encontrado.")
+            raise ValidationError(f"Proveedor con ID {entity_id} no encontrado.")
 
-        # Validar que el usuario existe
-        try:
-            user = User.objects.get(id=user_id, deleted_at__isnull=True)
-        except User.DoesNotExist:
-            raise ValidationError(f"Usuario con ID {user_id} no encontrado.")
-
-        # Validar todos los productos y calcular total ANTES de crear nada
-        products_data = []
-        total = Decimal('0.00')
-
-        for item in items:
-            try:
-                product = Product.objects.get(id=item['product'], deleted_at__isnull=True)
-            except Product.DoesNotExist:
-                raise ValidationError(f"Producto con ID {item['product']} no encontrado.")
-
-            # Validar que el producto pertenece al proveedor seleccionado
-            if product.supplier_id != supplier.id:
-                raise ValidationError(
-                    f"El producto '{product.name}' no pertenece al proveedor '{supplier.name}'."
-                )
-
-            quantity = item['quantity']
-
-            # Para entradas no validamos stock, solo registramos
-            total += product.price * quantity
-
-            products_data.append({
-                'product': product,
-                'quantity': quantity
-            })
-
-        # Establecer fecha inmutable (hora exacta del servidor)
-        transaction_date = timezone.now()
-
-        # Crear la compra y todos los movimientos en una transacción atómica
-        with transaction.atomic():
-            # Crear la compra
-            purchase = Purchase.objects.create(
-                supplier=supplier,
-                user=user,
-                date=transaction_date,
-                total=total
+    @classmethod
+    def _validate_item(cls, product, quantity, entity):
+        if product.supplier_id != entity.id:
+            raise ValidationError(
+                f"El producto '{product.name}' no pertenece al proveedor '{entity.name}'."
             )
 
-            # Crear movimientos para cada producto
-            for item_data in products_data:
-                product = item_data['product']
-                quantity = item_data['quantity']
+    @classmethod
+    def _create_record(cls, entity, user, date, total):
+        return Purchase.objects.create(
+            supplier=entity,
+            user=user,
+            date=date,
+            total=total,
+        )
 
-                # Registrar el stock antes del movimiento
-                stock_before = product.current_stock
+    @classmethod
+    def _build_movement_kwargs(cls, product, user, entity, record, quantity, stock_before, date):
+        return {
+            'movement_type': MovementType.INPUT,
+            'product': product,
+            'quantity': quantity,
+            'user': user,
+            'purchase': record,
+            'price': product.price,
+            'stock_in_movement': stock_before,
+            'date': date,
+        }
 
-                # Crear movimiento de entrada
-                Movement.objects.create(
-                    movement_type=MovementType.INPUT,
-                    date=transaction_date,  # Misma fecha inmutable
-                    quantity=quantity,
-                    product=product,
-                    user=user,
-                    price=product.price,  # Guardar precio histórico
-                    stock_in_movement=stock_before,
-                    purchase=purchase  # Relacionar con la compra
-                )
-
-                # Actualizar el stock del producto
-                product.current_stock += quantity
-                product.save()
-
-                # Actualizar alertas de stock
-                AlertService.update_stock_alerts(product)
-
-        return purchase
+    @classmethod
+    def _apply_stock_change(cls, product, quantity):
+        product.current_stock += quantity

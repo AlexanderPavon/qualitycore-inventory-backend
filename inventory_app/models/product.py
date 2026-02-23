@@ -5,7 +5,7 @@ from .category import Category
 from .supplier import Supplier
 from inventory_app.managers import SoftDeleteManager
 from inventory_app.validators import validate_image_size, validate_image_dimensions
-from inventory_app.constants import ValidationMessages
+from inventory_app.constants import ValidationMessages, ProductStatus
 
 class Product(models.Model):
     name = models.CharField(max_length=100, db_index=True)  # Índice para búsquedas rápidas por nombre
@@ -18,7 +18,7 @@ class Product(models.Model):
     )
     current_stock = models.PositiveIntegerField(default=0)  # Solo valores >= 0 (no puede ser negativo)
     minimum_stock = models.PositiveIntegerField()  # Solo valores >= 0
-    status = models.CharField(max_length=50)
+    status = models.CharField(max_length=50, choices=ProductStatus.CHOICES, default=ProductStatus.ACTIVE)
     supplier = models.ForeignKey(Supplier, on_delete=models.PROTECT, related_name='products')
     image = models.ImageField(
         upload_to="products/",

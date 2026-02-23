@@ -1,30 +1,29 @@
 # serializers/quotation_serializer.py
 from rest_framework import serializers
-from django.utils import timezone
 from django.core.exceptions import ValidationError as DjangoValidationError
 
 from inventory_app.models.quotation import Quotation
 from inventory_app.serializers.quoted_product_serializer import QuotedProductSerializer
 from inventory_app.services import QuotationService
+from inventory_app.utils.timezone_utils import to_local
 
 
 class QuotationSerializer(serializers.ModelSerializer):
     quoted_products = QuotedProductSerializer(many=True)
 
-    # Traducimos los nombres internos del modelo a nombres más amigables para el frontend
-    vat = serializers.DecimalField(source='tax', max_digits=10, decimal_places=2)
+    # Campos calculados por QuotationService — solo lectura en input
+    subtotal = serializers.DecimalField(max_digits=10, decimal_places=2, read_only=True)
+    vat = serializers.DecimalField(source='tax', max_digits=10, decimal_places=2, read_only=True)
+    total = serializers.DecimalField(max_digits=10, decimal_places=2, read_only=True)
     observations = serializers.CharField(source='notes', required=False, allow_blank=True)
 
     # Convertir la fecha UTC a la zona horaria local configurada
     date = serializers.SerializerMethodField()
 
     def get_date(self, obj):
-        """Convierte la fecha UTC a la zona horaria local (America/Guayaquil)"""
-        if obj.date:
-            # timezone.localtime convierte automáticamente a la zona horaria configurada en settings.TIME_ZONE
-            local_date = timezone.localtime(obj.date)
-            return local_date.isoformat()
-        return None
+        """Convierte la fecha UTC a la zona horaria local"""
+        local_date = to_local(obj.date)
+        return local_date.isoformat() if local_date else None
 
     class Meta:
         model = Quotation

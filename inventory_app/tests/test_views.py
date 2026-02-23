@@ -49,7 +49,7 @@ class APIBaseTestCase(TestCase):
 # Tests de Autenticación
 # =============================================================================
 class TestAuthAPI(TestCase):
-    """Tests para endpoints de autenticación."""
+    """Tests para endpoints de autenticación (JWT via httpOnly cookies)."""
 
     @classmethod
     def setUpTestData(cls):
@@ -64,16 +64,33 @@ class TestAuthAPI(TestCase):
     def setUp(self):
         self.client = APIClient()
 
-    def test_login_exitoso(self):
-        """Login con credenciales correctas debe retornar tokens."""
+    # --- Login ---
+
+    def test_login_exitoso_setea_cookies(self):
+        """Login exitoso debe setear access_token y refresh_token como cookies httpOnly."""
         response = self.client.post('/api/login/', {
             'email': 'auth@test.com',
             'password': 'TestPass1!',
         }, format='json')
         self.assertEqual(response.status_code, status.HTTP_200_OK)
-        self.assertIn('tokens', response.data)
-        self.assertIn('access', response.data['tokens'])
-        self.assertIn('refresh', response.data['tokens'])
+        # Tokens NO deben estar en el body JSON
+        self.assertNotIn('tokens', response.data)
+        # Datos del usuario sí deben estar
+        self.assertIn('user', response.data)
+        # Cookies httpOnly deben estar presentes
+        self.assertIn('access_token', response.cookies)
+        self.assertIn('refresh_token', response.cookies)
+        self.assertTrue(response.cookies['access_token']['httponly'])
+        self.assertTrue(response.cookies['refresh_token']['httponly'])
+
+    def test_login_retorna_datos_usuario(self):
+        """Login exitoso debe retornar datos del usuario en el body."""
+        response = self.client.post('/api/login/', {
+            'email': 'auth@test.com',
+            'password': 'TestPass1!',
+        }, format='json')
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertEqual(response.data['user']['email'], 'auth@test.com')
 
     def test_login_password_incorrecto(self):
         """Login con password incorrecto debe fallar."""
@@ -81,7 +98,7 @@ class TestAuthAPI(TestCase):
             'email': 'auth@test.com',
             'password': 'WrongPass1!',
         }, format='json')
-        self.assertNotEqual(response.status_code, status.HTTP_200_OK)
+        self.assertEqual(response.status_code, status.HTTP_401_UNAUTHORIZED)
 
     def test_login_usuario_inexistente(self):
         """Login con usuario inexistente debe fallar."""
@@ -89,12 +106,68 @@ class TestAuthAPI(TestCase):
             'email': 'noexiste@test.com',
             'password': 'TestPass1!',
         }, format='json')
-        self.assertNotEqual(response.status_code, status.HTTP_200_OK)
+        self.assertEqual(response.status_code, status.HTTP_401_UNAUTHORIZED)
+
+    # --- Acceso con cookie ---
+
+    def test_acceso_con_cookie_access_token(self):
+        """Endpoint protegido debe funcionar con access_token en cookie."""
+        # Primero hacer login para obtener la cookie
+        login_resp = self.client.post('/api/login/', {
+            'email': 'auth@test.com',
+            'password': 'TestPass1!',
+        }, format='json')
+        access_token = login_resp.cookies['access_token'].value
+
+        # Usar la cookie para acceder a endpoint protegido
+        self.client.cookies['access_token'] = access_token
+        response = self.client.get('/api/products/')
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
 
     def test_endpoint_sin_autenticacion(self):
-        """Acceder a endpoint protegido sin token debe retornar 401."""
+        """Acceder a endpoint protegido sin cookie debe retornar 401."""
         response = self.client.get('/api/products/')
         self.assertEqual(response.status_code, status.HTTP_401_UNAUTHORIZED)
+
+    # --- Refresh ---
+
+    def test_refresh_renueva_cookies(self):
+        """POST /api/token/refresh/ con refresh cookie debe setear nuevas cookies."""
+        # Login para obtener cookies
+        login_resp = self.client.post('/api/login/', {
+            'email': 'auth@test.com',
+            'password': 'TestPass1!',
+        }, format='json')
+        refresh_token = login_resp.cookies['refresh_token'].value
+
+        # Hacer refresh con la cookie
+        self.client.cookies['refresh_token'] = refresh_token
+        response = self.client.post('/api/token/refresh/')
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertIn('access_token', response.cookies)
+
+    def test_refresh_sin_cookie_falla(self):
+        """POST /api/token/refresh/ sin refresh cookie debe retornar 401."""
+        response = self.client.post('/api/token/refresh/')
+        self.assertEqual(response.status_code, status.HTTP_401_UNAUTHORIZED)
+
+    # --- Logout ---
+
+    def test_logout_borra_cookies(self):
+        """POST /api/logout/ debe borrar las cookies de tokens."""
+        # Login primero
+        login_resp = self.client.post('/api/login/', {
+            'email': 'auth@test.com',
+            'password': 'TestPass1!',
+        }, format='json')
+        self.client.cookies['access_token'] = login_resp.cookies['access_token'].value
+
+        # Logout
+        response = self.client.post('/api/logout/')
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        # Las cookies deben estar "borradas" (max-age=0 o valor vacío)
+        self.assertEqual(response.cookies['access_token'].value, '')
+        self.assertEqual(response.cookies['refresh_token'].value, '')
 
 
 # =============================================================================

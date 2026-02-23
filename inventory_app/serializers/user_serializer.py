@@ -3,7 +3,7 @@ from rest_framework import serializers
 from django.contrib.auth.password_validation import validate_password
 from django.core.exceptions import ValidationError as DjangoValidationError
 from inventory_app.models.user import User
-from inventory_app.constants import UserRole
+from inventory_app.constants import UserRole, BusinessRules
 
 class UserSerializer(serializers.ModelSerializer):
     password = serializers.CharField(write_only=True, required=False)
@@ -107,18 +107,19 @@ class UserSerializer(serializers.ModelSerializer):
                     "role": "Solo un SuperAdmin puede asignar el rol de SuperAdmin."
                 })
 
-            # Limitar a máximo 2 SuperAdmins en el sistema
+            # Limitar SuperAdmins en el sistema
+            max_sa = BusinessRules.MAX_SUPERADMINS
             superadmin_count = User.objects.filter(role=UserRole.SUPER_ADMIN, deleted_at__isnull=True).count()
             if self.instance is None:  # Creando nuevo usuario
-                if superadmin_count >= 2:
+                if superadmin_count >= max_sa:
                     raise serializers.ValidationError({
-                        "role": "Ya existen 2 SuperAdmins en el sistema. No se pueden crear más."
+                        "role": f"Ya existen {max_sa} SuperAdmins en el sistema. No se pueden crear más."
                     })
             else:  # Editando usuario existente
                 # Si estamos cambiando el rol a SuperAdmin
-                if self.instance.role != UserRole.SUPER_ADMIN and superadmin_count >= 2:
+                if self.instance.role != UserRole.SUPER_ADMIN and superadmin_count >= max_sa:
                     raise serializers.ValidationError({
-                        "role": "Ya existen 2 SuperAdmins en el sistema. No se pueden crear más."
+                        "role": f"Ya existen {max_sa} SuperAdmins en el sistema. No se pueden crear más."
                     })
 
         return attrs

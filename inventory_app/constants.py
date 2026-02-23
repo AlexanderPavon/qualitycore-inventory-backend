@@ -8,10 +8,14 @@ class MovementType:
     """Tipos de movimiento de inventario"""
     INPUT = 'input'
     OUTPUT = 'output'
+    ADJUSTMENT = 'adjustment'
+    CORRECTION = 'correction'
 
     CHOICES = [
         (INPUT, 'Entrada'),
         (OUTPUT, 'Salida'),
+        (ADJUSTMENT, 'Ajuste'),
+        (CORRECTION, 'Corrección'),
     ]
 
 
@@ -30,14 +34,25 @@ class UserRole:
 
 class ProductStatus:
     """Estados de productos"""
-    AVAILABLE = 'Disponible'
-    OUT_OF_STOCK = 'Agotado'
-    LOW_STOCK = 'Stock Bajo'
+    ACTIVE = 'Activo'
+    INACTIVE = 'Inactivo'
 
     CHOICES = [
-        (AVAILABLE, 'Disponible'),
-        (OUT_OF_STOCK, 'Agotado'),
-        (LOW_STOCK, 'Stock Bajo'),
+        (ACTIVE, 'Activo'),
+        (INACTIVE, 'Inactivo'),
+    ]
+
+
+class AlertType:
+    """Tipos de alerta de stock"""
+    OUT_OF_STOCK = 'out_of_stock'
+    ONE_UNIT = 'one_unit'
+    LOW_STOCK = 'low_stock'
+
+    CHOICES = [
+        (LOW_STOCK, 'Stock bajo'),
+        (ONE_UNIT, 'Solo una unidad'),
+        (OUT_OF_STOCK, 'Sin stock'),
     ]
 
 
@@ -73,12 +88,30 @@ class ValidationMessages:
     # Movimientos
     MOVEMENT_CUSTOMER_REQUIRED = 'El cliente es requerido para movimientos de salida.'
 
+    # Ajustes de inventario
+    ADJUSTMENT_REASON_REQUIRED = 'El motivo del ajuste es obligatorio.'
+    ADJUSTMENT_QUANTITY_NONZERO = 'La cantidad del ajuste no puede ser cero.'
+    ADJUSTMENT_STOCK_INSUFFICIENT = (
+        'Ajuste negativo no permitido. Stock actual: {available}, '
+        'ajuste solicitado: -{requested}.'
+    )
+
+    # Correcciones de movimientos
+    CORRECTION_ALREADY_CORRECTED = 'Este movimiento ya fue corregido.'
+    CORRECTION_REASON_REQUIRED = 'El motivo de la corrección es obligatorio.'
+    CORRECTION_SAME_QUANTITY = 'La cantidad correcta no puede ser igual a la original.'
+    CORRECTION_INVALID_TYPE = 'Solo se pueden corregir movimientos de entrada o salida.'
+    CORRECTION_STOCK_NEGATIVE = 'La corrección dejaría el stock en negativo.'
+
 
 class BusinessRules:
     """Reglas de negocio centralizadas"""
 
     # IVA Ecuador
     TAX_RATE = 0.15  # 15%
+
+    # Límite de SuperAdmins en el sistema
+    MAX_SUPERADMINS = 2
 
     # Validaciones
     MIN_PHONE_LENGTH = 10
