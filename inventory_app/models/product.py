@@ -4,7 +4,7 @@ from django.core.validators import MinValueValidator
 from .category import Category
 from .supplier import Supplier
 from inventory_app.managers import SoftDeleteManager
-from inventory_app.validators import validate_image_size, validate_image_dimensions
+from inventory_app.validators import validate_image_type, validate_image_size, validate_image_dimensions
 from inventory_app.constants import ValidationMessages, ProductStatus
 
 class Product(models.Model):
@@ -24,7 +24,7 @@ class Product(models.Model):
         upload_to="products/",
         null=True,
         blank=True,
-        validators=[validate_image_size, validate_image_dimensions]  # Validación de tamaño y dimensiones
+        validators=[validate_image_type, validate_image_size, validate_image_dimensions]
     )
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)

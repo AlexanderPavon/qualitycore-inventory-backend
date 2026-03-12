@@ -10,7 +10,7 @@ from .business_validators import (
     QuantityValidator,
     StockValidator
 )
-from .image_validators import validate_image_size, validate_image_dimensions
+from .image_validators import validate_image_type, validate_image_size, validate_image_dimensions
 from .password_validators import ComplexPasswordValidator
 
 __all__ = [
@@ -21,6 +21,7 @@ __all__ = [
     'QuantityValidator',
     'StockValidator',
     # Image validators
+    'validate_image_type',
     'validate_image_size',
     'validate_image_dimensions',
     # Password validators

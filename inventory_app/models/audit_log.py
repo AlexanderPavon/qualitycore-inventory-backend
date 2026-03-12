@@ -54,6 +54,10 @@ class AuditLog(models.Model):
     def __str__(self):
         return f"{self.user_email} - {self.action} {self.model_name} at {self.timestamp}"
 
+    # Sentinel email values for non-user callers
+    ANONYMOUS_EMAIL = 'anonymous'
+    SYSTEM_EMAIL = 'system'
+
     @staticmethod
     def log_action(user, action, model_name, obj=None, changes=None, request=None):
         """
@@ -65,11 +69,26 @@ class AuditLog(models.Model):
             model_name: Nombre del modelo afectado
             obj: Instancia del objeto afectado (opcional)
             changes: Diccionario con los cambios realizados (opcional)
-            request: Objeto request de Django (para obtener IP y user agent)
+            request: Objeto request de Django (para obtener IP y user agent).
+                     Si es None y el usuario no está autenticado, el log se
+                     registra como 'system' (tarea Celery / background) en lugar
+                     de 'anonymous' (request real sin sesión).
         """
+        if user and user.is_authenticated:
+            log_email = user.email
+            log_user = user
+        elif request is None:
+            # Llamada desde Celery u otro contexto sin request → acción de sistema
+            log_email = AuditLog.SYSTEM_EMAIL
+            log_user = None
+        else:
+            # Request real sin usuario autenticado → acceso anónimo
+            log_email = AuditLog.ANONYMOUS_EMAIL
+            log_user = None
+
         log = AuditLog(
-            user=user if user and user.is_authenticated else None,
-            user_email=user.email if user and user.is_authenticated else 'anonymous',
+            user=log_user,
+            user_email=log_email,
             action=action,
             model_name=model_name,
             changes=changes

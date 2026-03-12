@@ -73,9 +73,5 @@ class Customer(models.Model):
             elif self.document_type == 'passport':
                 validate_passport(self.document)
 
-    def save(self, *args, **kwargs):
-        self.full_clean()
-        super().save(*args, **kwargs)
-
     def __str__(self):
         return self.name

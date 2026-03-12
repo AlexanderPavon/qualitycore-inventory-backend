@@ -11,5 +11,11 @@ from .quotation_service import QuotationService
 from .movement_service import MovementService
 from .sale_service import SaleService
 from .purchase_service import PurchaseService
+from .stock_service import StockService
+from .user_service import UserService
+from .dashboard_service import DashboardService
 
-__all__ = ['QuotationService', 'MovementService', 'SaleService', 'PurchaseService']
+__all__ = [
+    'QuotationService', 'MovementService', 'SaleService', 'PurchaseService',
+    'StockService', 'UserService', 'DashboardService',
+]

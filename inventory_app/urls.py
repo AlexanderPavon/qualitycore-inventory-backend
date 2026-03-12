@@ -3,7 +3,7 @@ from inventory_app.views.auth_view import (
     LoginView, ForgotPasswordView, ResetPasswordView, ChangePasswordView, LogoutView
 )
 from inventory_app.views.token_refresh_view import CookieTokenRefreshView
-from inventory_app.views.user_view import UserListCreateView, UserDetailView
+from inventory_app.views.user_view import UserListCreateView, UserDetailView, UserMeView
 from inventory_app.views.customer_view import CustomerListCreateView, CustomerDetailView
 from inventory_app.views.supplier_view import SupplierListCreateView, SupplierDetailView
 from inventory_app.views.product_view import ProductListCreateView, ProductDetailView, ProductStockCheckView
@@ -34,6 +34,7 @@ urlpatterns = [
     path('change-password/', ChangePasswordView.as_view()),
 
     # Users
+    path('users/me/', UserMeView.as_view()),
     path('users/', UserListCreateView.as_view()),
     path('users/<int:pk>/', UserDetailView.as_view()),
 
@@ -48,7 +49,7 @@ urlpatterns = [
     # Products
     path('products/', ProductListCreateView.as_view()),
     path('products/<int:pk>/', ProductDetailView.as_view()),
-    path('products/check-stock/', ProductStockCheckView.as_view()),
+    path('products/check_stock/', ProductStockCheckView.as_view()),
 
     # Categories
     path('categories/', CategoryListCreateView.as_view()),

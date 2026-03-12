@@ -4,7 +4,7 @@ Servicio para gestionar lógica de negocio de cotizaciones.
 Encapsula operaciones complejas relacionadas con cotizaciones.
 """
 
-from typing import List, Dict
+from typing import List, Dict, Optional
 from decimal import Decimal
 from django.core.exceptions import ValidationError
 from django.db import transaction
@@ -28,7 +28,8 @@ class QuotationService:
         customer_id: int,
         user_id: int,
         products: List[Dict],
-        notes: str = ""
+        notes: str = "",
+        tax_rate: Optional[Decimal] = None
     ) -> Quotation:
         """
         Crea una cotización con sus productos asociados.
@@ -41,6 +42,9 @@ class QuotationService:
                 - quantity: Cantidad del producto
                 - unit_price: Precio unitario
             notes: Observaciones opcionales
+            tax_rate: Tasa de IVA a aplicar. Si es None, usa BusinessRules.TAX_RATE.
+                      El serializer debe pasar este valor explícitamente para que
+                      sea visible qué tasa se está aplicando.
 
         Returns:
             Quotation: La cotización creada con todos sus productos
@@ -56,15 +60,17 @@ class QuotationService:
                     {'product_id': 10, 'quantity': 5, 'unit_price': Decimal('100.00')},
                     {'product_id': 11, 'quantity': 2, 'unit_price': Decimal('50.00')},
                 ],
-                notes='Cotización para cliente preferencial'
+                notes='Cotización para cliente preferencial',
+                tax_rate=Decimal('0.15'),
             )
         """
         # Validar reglas de negocio
         QuotationService._validate_products(products)
 
-        # Calcular totales
+        # Calcular totales — usar la tasa explícita o el valor por defecto del sistema
+        effective_tax_rate = tax_rate if tax_rate is not None else Decimal(str(BusinessRules.TAX_RATE))
         subtotal = QuotationService._calculate_subtotal(products)
-        tax = subtotal * Decimal(str(BusinessRules.TAX_RATE))
+        tax = subtotal * effective_tax_rate
         total = subtotal + tax
 
         # Usar transacción para garantizar atomicidad

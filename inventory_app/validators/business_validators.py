@@ -4,7 +4,10 @@ Validadores de reglas de negocio reutilizables.
 Separan la lógica de validación del modelo/serializer.
 """
 
+import re
+
 from django.core.exceptions import ValidationError
+from django.utils import timezone
 from decimal import Decimal
 from typing import Optional
 from inventory_app.constants import ValidationMessages, BusinessRules
@@ -24,7 +27,6 @@ class PhoneValidator:
         Raises:
             ValidationError: Si el teléfono no cumple el formato
         """
-        import re
         if not re.match(ValidationMessages.PHONE_REGEX, phone):
             raise ValidationError(ValidationMessages.PHONE_INVALID_FORMAT)
 
@@ -43,7 +45,6 @@ class DocumentValidator:
         Raises:
             ValidationError: Si el documento no cumple el formato
         """
-        import re
         if not re.match(ValidationMessages.DOCUMENT_REGEX, document):
             raise ValidationError(ValidationMessages.DOCUMENT_INVALID_FORMAT)
 
@@ -54,39 +55,30 @@ class PriceValidator:
     @staticmethod
     def validate(price: Decimal) -> None:
         """
-        Valida que el precio sea >= 0.
+        Valida que el precio esté en el rango [0, BusinessRules.MAX_PRODUCT_PRICE].
 
         Args:
             price: Precio a validar
 
         Raises:
-            ValidationError: Si el precio es negativo
+            ValidationError: Si el precio es negativo o excede el límite máximo
         """
         if price < 0:
             raise ValidationError(ValidationMessages.PRICE_NEGATIVE)
+        if price > Decimal(str(BusinessRules.MAX_PRODUCT_PRICE)):
+            raise ValidationError(
+                f"El precio no puede exceder ${BusinessRules.MAX_PRODUCT_PRICE:,.2f}."
+            )
 
 
 class QuantityValidator:
     """Validador de cantidades"""
 
     @staticmethod
-    def validate_positive(quantity: int) -> None:
-        """
-        Valida que la cantidad sea > 0.
-
-        Args:
-            quantity: Cantidad a validar
-
-        Raises:
-            ValidationError: Si la cantidad es <= 0
-        """
-        if quantity is None or quantity <= 0:
-            raise ValidationError(ValidationMessages.QUANTITY_INVALID)
-
-    @staticmethod
     def validate_min_one(quantity: int) -> None:
         """
         Valida que la cantidad sea >= 1.
+        Para enteros (el único tipo que maneja el sistema), qty >= 1 equivale a qty > 0.
 
         Args:
             quantity: Cantidad a validar
@@ -96,6 +88,26 @@ class QuantityValidator:
         """
         if quantity is None or quantity < 1:
             raise ValidationError(ValidationMessages.QUANTITY_MIN_ONE)
+
+
+class MovementDateValidator:
+    """Valida que la fecha de un movimiento sea del día actual (no futura, no pasada)."""
+
+    @staticmethod
+    def validate(value) -> None:
+        """
+        Raises ValidationError si la fecha es futura o de un día anterior al actual.
+        Compartida entre MovementSerializer y MovementAdjustmentSerializer.
+        """
+        now = timezone.now()
+        if value > now:
+            raise ValidationError("La fecha del movimiento no puede ser futura.")
+        today_start = now.replace(hour=0, minute=0, second=0, microsecond=0)
+        if value < today_start:
+            raise ValidationError(
+                "Solo se pueden registrar movimientos del día actual. "
+                "No se permiten fechas de días anteriores."
+            )
 
 
 class StockValidator:

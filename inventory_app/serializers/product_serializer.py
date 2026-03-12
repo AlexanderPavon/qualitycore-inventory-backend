@@ -1,10 +1,8 @@
 # serializers/product_serializer.py
-import logging
 from rest_framework import serializers
 from inventory_app.models.product import Product
 from inventory_app.constants import ProductStatus
-
-logger = logging.getLogger(__name__)
+from inventory_app.storage import get_storage_backend
 
 class ProductSerializer(serializers.ModelSerializer):
    image_url = serializers.SerializerMethodField()
@@ -77,29 +75,4 @@ class ProductSerializer(serializers.ModelSerializer):
        return obj.status == ProductStatus.ACTIVE
 
    def get_image_url(self, obj):
-       if not obj.image:
-           return None
-
-       try:
-           url = obj.image.url
-           logger.debug(f"Product {obj.name}: Image URL = {url}")
-
-           # Solo devolver URLs de Cloudinary válidas
-           if url and url.startswith('https://res.cloudinary.com/'):
-               logger.debug(f"Cloudinary URL found: {url}")
-               return url
-
-           # Si es ruta local (/media/), devolver null en lugar de la ruta rota
-           if url and url.startswith('/media/'):
-               logger.debug(f"Local path detected (Cloudinary not configured): {url}")
-               return None
-
-           # Para cualquier otra URL válida con http/https
-           if url and url.startswith('http'):
-               return url
-
-           return None
-
-       except Exception as e:
-           logger.error(f"Error getting image for {obj.name}: {e}")
-           return None
+       return get_storage_backend().get_image_url(obj.image)

@@ -1,13 +1,10 @@
 # serializers/sale_serializer.py
 from rest_framework import serializers
-from django.core.exceptions import ValidationError as DjangoValidationError
-from django.utils import timezone
-from decimal import Decimal
 
 from inventory_app.models.sale import Sale
-from inventory_app.models.movement import Movement
 from inventory_app.services import SaleService
-from inventory_app.serializers.mixins import InvoiceMovementsMixin
+from inventory_app.serializers.mixins import InvoiceMovementsMixin, TransactionSerializerMixin
+
 
 class SaleItemSerializer(serializers.Serializer):
     """
@@ -16,7 +13,8 @@ class SaleItemSerializer(serializers.Serializer):
     product = serializers.IntegerField(help_text="ID del producto")
     quantity = serializers.IntegerField(min_value=1, help_text="Cantidad a vender")
 
-class SaleCreateSerializer(serializers.Serializer):
+
+class SaleCreateSerializer(TransactionSerializerMixin):
     """
     Serializer para crear una venta con múltiples productos.
     La fecha se establece automáticamente con la hora exacta del servidor.
@@ -24,40 +22,15 @@ class SaleCreateSerializer(serializers.Serializer):
     customer = serializers.IntegerField(help_text="ID del cliente")
     items = SaleItemSerializer(many=True, help_text="Lista de productos en el carrito")
 
-    def validate_items(self, value):
-        """
-        Valida que haya al menos un producto en el carrito.
-        """
-        if not value or len(value) == 0:
-            raise serializers.ValidationError("Debe incluir al menos un producto en la venta.")
-        return value
+    def get_transaction_label(self):
+        return "venta"
 
-    def create(self, validated_data):
-        """
-        Crea una venta con múltiples productos delegando al servicio.
-        La fecha se establece automáticamente en el servicio.
-        """
-        customer_id = validated_data.get('customer')
-        items = validated_data.get('items')
+    def get_entity_id(self, validated_data):
+        return validated_data.get('customer')
 
-        # Obtener user_id del contexto (pasado desde la vista)
-        user_id = self.context.get('user_id')
-        if not user_id:
-            raise serializers.ValidationError("Usuario no identificado.")
+    def execute_service(self, entity_id, user_id, items):
+        return SaleService.create(entity_id, user_id, items)
 
-        try:
-            # Delegar creación al servicio (lógica de negocio)
-            # La fecha se establece automáticamente como timezone.now()
-            sale = SaleService.create_sale(
-                customer_id=customer_id,
-                user_id=user_id,
-                items=items
-            )
-            return sale
-
-        except DjangoValidationError as e:
-            # Convertir ValidationError de Django a DRF
-            raise serializers.ValidationError(str(e))
 
 class SaleDetailSerializer(InvoiceMovementsMixin, serializers.ModelSerializer):
     """

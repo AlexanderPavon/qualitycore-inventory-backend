@@ -180,12 +180,11 @@ DATA_UPLOAD_MAX_MEMORY_SIZE = 10 * 1024 * 1024  # 10 MB máximo por request
 DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
 
 # --- CORS (for React frontend) ---
+# En producción, definir CORS_ALLOWED_ORIGINS en variables de entorno.
+# El default solo cubre desarrollo local; dominios de producción NO deben hardcodearse aquí.
 CORS_ALLOWED_ORIGINS = env.list(
     'CORS_ALLOWED_ORIGINS',
-    default=[
-        "http://localhost:3000",
-        "https://qualitycore-inventory-frontend-production.up.railway.app",
-    ]
+    default=["http://localhost:3000"]
 )
 
 # --- CSRF (for secure POST requests) ---
@@ -258,6 +257,21 @@ CELERY_TIMEZONE = TIME_ZONE
 CELERY_TASK_TRACK_STARTED = True
 CELERY_TASK_TIME_LIMIT = 30 * 60  # 30 minutos máximo por tarea
 CELERY_RESULT_EXPIRES = 3600  # Los resultados expiran después de 1 hora
+CELERY_BROKER_POOL_LIMIT = 10       # conexiones simultáneas al broker Redis
+CELERY_REDIS_MAX_CONNECTIONS = 50   # conexiones Redis máximas por proceso worker
+
+# --- Tareas periódicas (Celery Beat) ---
+from celery.schedules import crontab  # noqa: E402
+
+CELERY_BEAT_SCHEDULE = {
+    # Elimina reportes PDF con más de 30 días de antigüedad.
+    # Ejecutar con: celery -A inventory beat -l info
+    'cleanup-old-reports': {
+        'task': 'inventory_app.tasks.cleanup_old_reports',
+        'schedule': crontab(hour=3, minute=0),  # 3am diario
+        'kwargs': {'days': 30},
+    },
+}
 
 # --- API Documentation (Swagger/OpenAPI) ---
 SPECTACULAR_SETTINGS = {

@@ -8,7 +8,7 @@ from django.test import TestCase
 from django.utils import timezone
 from decimal import Decimal
 
-from inventory_app.models import Product, Category, Supplier, Customer, User, Movement, Sale
+from inventory_app.models import Product, Category, Supplier, Customer, User, Movement, Sale, Purchase
 from inventory_app.models.alert import Alert
 
 
@@ -46,7 +46,7 @@ class BaseTestCase(TestCase):
             price=Decimal('999.99'),
             current_stock=50,
             minimum_stock=5,
-            status='Disponible',
+            status='Activo',
             supplier=cls.supplier,
         )
 
@@ -263,12 +263,19 @@ class TestMovementModel(BaseTestCase):
     """Tests para el modelo Movement."""
 
     def test_crear_movimiento_entrada(self):
-        """Debe crear un movimiento de entrada."""
+        """Debe crear un movimiento de entrada (vinculado a compra para satisfacer constraint DB)."""
+        purchase = Purchase.objects.create(
+            supplier=self.supplier,
+            user=self.user,
+            date=timezone.now(),
+            total=Decimal('9999.90'),
+        )
         movement = Movement.objects.create(
             movement_type='input',
             product=self.product,
             quantity=10,
             user=self.user,
+            purchase=purchase,
             date=timezone.now(),
             stock_in_movement=self.product.current_stock,
         )
@@ -276,13 +283,20 @@ class TestMovementModel(BaseTestCase):
         self.assertEqual(movement.quantity, 10)
 
     def test_crear_movimiento_salida_con_cliente(self):
-        """Debe crear un movimiento de salida con cliente."""
+        """Debe crear un movimiento de salida con cliente (vinculado a venta para satisfacer constraint DB)."""
+        sale = Sale.objects.create(
+            customer=self.customer,
+            user=self.user,
+            date=timezone.now(),
+            total=Decimal('499.95'),
+        )
         movement = Movement.objects.create(
             movement_type='output',
             product=self.product,
             quantity=5,
             user=self.user,
             customer=self.customer,
+            sale=sale,
             date=timezone.now(),
             stock_in_movement=self.product.current_stock,
         )
@@ -291,13 +305,14 @@ class TestMovementModel(BaseTestCase):
     def test_str_movimiento(self):
         """__str__ debe mostrar tipo, cantidad y producto."""
         movement = Movement.objects.create(
-            movement_type='input',
+            movement_type='adjustment',
             product=self.product,
             quantity=3,
             user=self.user,
             date=timezone.now(),
+            reason='Test ajuste',
         )
-        self.assertIn('input', str(movement))
+        self.assertIn('adjustment', str(movement))
         self.assertIn('Laptop Test', str(movement))
 
 

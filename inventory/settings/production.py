@@ -31,25 +31,31 @@ LOGGING['handlers']['console']['level'] = 'INFO'
 LOGGING['loggers']['django']['level'] = 'WARNING'
 LOGGING['loggers']['inventory_app']['level'] = 'INFO'
 
-# --- Sentry Error Monitoring (solo en producción) ---
-import sentry_sdk
-from sentry_sdk.integrations.django import DjangoIntegration
-from sentry_sdk.integrations.celery import CeleryIntegration
+# --- Sentry Error Monitoring (solo en producción, requiere SENTRY_DSN en env) ---
+import logging as _logging
+_sentry_dsn = env('SENTRY_DSN', default=None)
+if _sentry_dsn:
+    import sentry_sdk
+    from sentry_sdk.integrations.django import DjangoIntegration
+    from sentry_sdk.integrations.celery import CeleryIntegration
 
-sentry_sdk.init(
-    dsn=env('SENTRY_DSN', default=''),
-    integrations=[
-        DjangoIntegration(),
-        CeleryIntegration(),
-    ],
-    # Porcentaje de transacciones a monitorear (0.0 a 1.0)
-    traces_sample_rate=0.3,
-    profiles_sample_rate=0.3,
-    environment='production',
-    send_default_pii=False,  # No enviar info personal
-)
+    sentry_sdk.init(
+        dsn=_sentry_dsn,
+        integrations=[
+            DjangoIntegration(),
+            CeleryIntegration(),
+        ],
+        traces_sample_rate=0.3,
+        profiles_sample_rate=0.3,
+        environment='production',
+        send_default_pii=False,
+    )
+else:
+    _logging.getLogger(__name__).warning(
+        "SENTRY_DSN no configurado — monitoreo de errores desactivado en producción."
+    )
 
 # --- Email: Usa servicio real en producción ---
 # La configuración de EMAIL ya está en base.py usando variables de entorno
 
-print(">>> Usando configuracion de PRODUCCION (production.py)")
+_logging.getLogger(__name__).info("Usando configuracion de PRODUCCION (production.py)")

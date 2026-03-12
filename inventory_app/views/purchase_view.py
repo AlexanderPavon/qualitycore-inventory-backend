@@ -1,16 +1,20 @@
 # views/purchase_view.py
+import re
 from rest_framework import generics, status
 from rest_framework.response import Response
+from django.db.models import Q
 from inventory_app.models import Purchase
 from inventory_app.serializers.purchase_serializer import (
     PurchaseCreateSerializer,
     PurchaseDetailSerializer
 )
 from inventory_app.permissions import IsAdminForWrite
-from inventory_app.throttles import WriteOperationThrottle
+from inventory_app.throttles import WriteThrottleMixin
+from inventory_app.views.list_mixins import IdempotentCreateMixin, NoPageMixin
 
 
-class PurchaseListCreateView(generics.ListCreateAPIView):
+class PurchaseListCreateView(WriteThrottleMixin, IdempotentCreateMixin, NoPageMixin, generics.ListCreateAPIView):
+    idempotency_prefix = "purchase"
     """
     Vista para listar y crear compras con paginación y filtros server-side.
     GET: Lista compras paginadas (20 por página por defecto)
@@ -23,7 +27,6 @@ class PurchaseListCreateView(generics.ListCreateAPIView):
         page: Número de página
     """
     permission_classes = [IsAdminForWrite]
-    throttle_classes = [WriteOperationThrottle]
 
     def get_queryset(self):
         qs = Purchase.objects.filter(deleted_at__isnull=True).select_related(
@@ -33,45 +36,31 @@ class PurchaseListCreateView(generics.ListCreateAPIView):
 
         start_date = self.request.query_params.get('start_date')
         end_date = self.request.query_params.get('end_date')
+        search = self.request.query_params.get('search', '').strip()
         if start_date:
             qs = qs.filter(date__date__gte=start_date)
         if end_date:
             qs = qs.filter(date__date__lte=end_date)
+        if search:
+            q = (
+                Q(supplier__name__icontains=search) |
+                Q(user__name__icontains=search) |
+                Q(movements__product__name__icontains=search)
+            )
+            id_match = re.fullmatch(r'(?:compra\s*#\s*)?(\d+)', search, re.IGNORECASE)
+            if id_match:
+                q |= Q(id=int(id_match.group(1)))
+            qs = qs.filter(q).distinct()
 
         return qs
-
-    def list(self, request, *args, **kwargs):
-        queryset = self.filter_queryset(self.get_queryset())
-
-        # Sin paginación cuando se busca (client-side filtering necesita todos los registros)
-        if request.query_params.get('no_page') == 'true':
-            serializer = self.get_serializer(queryset, many=True)
-            return Response({
-                'count': queryset.count(),
-                'next': None,
-                'previous': None,
-                'results': serializer.data
-            })
-
-        page = self.paginate_queryset(queryset)
-        if page is not None:
-            serializer = self.get_serializer(page, many=True)
-            return self.get_paginated_response(serializer.data)
-
-        serializer = self.get_serializer(queryset, many=True)
-        return Response(serializer.data)
 
     def get_serializer_class(self):
         if self.request.method == 'POST':
             return PurchaseCreateSerializer
         return PurchaseDetailSerializer
 
-    def create(self, request, *args, **kwargs):
-        """
-        Crea una compra con múltiples productos.
-        La lógica de negocio se maneja en el PurchaseSerializer que delega a PurchaseService.
-        """
-        # Pasar user_id al contexto del serializer
+    def _do_create(self, request, *args, **kwargs):
+        """Crea una compra con múltiples productos delegando a PurchaseService vía serializer."""
         serializer = self.get_serializer(
             data=request.data,
             context={'user_id': request.user.id}
@@ -79,12 +68,11 @@ class PurchaseListCreateView(generics.ListCreateAPIView):
         serializer.is_valid(raise_exception=True)
         purchase = serializer.save()
 
-        # Retornar respuesta con detalles completos
         detail_serializer = PurchaseDetailSerializer(purchase)
-        return Response({
-            'message': 'Compra registrada correctamente',
-            'purchase': detail_serializer.data
-        }, status=status.HTTP_201_CREATED)
+        return Response(
+            {'message': 'Compra registrada correctamente', 'purchase': detail_serializer.data},
+            status=status.HTTP_201_CREATED,
+        )
 
 
 class PurchaseDetailView(generics.RetrieveAPIView):

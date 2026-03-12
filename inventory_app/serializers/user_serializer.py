@@ -2,6 +2,7 @@
 from rest_framework import serializers
 from django.contrib.auth.password_validation import validate_password
 from django.core.exceptions import ValidationError as DjangoValidationError
+from django.db import transaction
 from inventory_app.models.user import User
 from inventory_app.constants import UserRole, BusinessRules
 
@@ -107,9 +108,16 @@ class UserSerializer(serializers.ModelSerializer):
                     "role": "Solo un SuperAdmin puede asignar el rol de SuperAdmin."
                 })
 
-            # Limitar SuperAdmins en el sistema
+            # Verificación rápida (sin lock) para feedback inmediato al usuario.
+            # La validación definitiva con SELECT FOR UPDATE ocurre en create()/update()
+            # dentro de transaction.atomic(), donde el lock tiene sentido y no lanza
+            # TransactionManagementError en PostgreSQL (ATOMIC_REQUESTS no está activo).
             max_sa = BusinessRules.MAX_SUPERADMINS
-            superadmin_count = User.objects.filter(role=UserRole.SUPER_ADMIN, deleted_at__isnull=True).count()
+            superadmin_count = (
+                User.objects
+                .filter(role=UserRole.SUPER_ADMIN, deleted_at__isnull=True)
+                .count()
+            )
             if self.instance is None:  # Creando nuevo usuario
                 if superadmin_count >= max_sa:
                     raise serializers.ValidationError({
@@ -124,25 +132,56 @@ class UserSerializer(serializers.ModelSerializer):
 
         return attrs
 
+    def _check_superadmin_limit_locked(self, adding_new_superadmin: bool) -> None:
+        """
+        Verificación definitiva del límite de SuperAdmins con SELECT FOR UPDATE.
+        Debe llamarse desde dentro de un bloque transaction.atomic().
+        Si adding_new_superadmin es False, es un no-op.
+        """
+        if not adding_new_superadmin:
+            return
+        max_sa = BusinessRules.MAX_SUPERADMINS
+        superadmin_count = (
+            User.objects
+            .filter(role=UserRole.SUPER_ADMIN, deleted_at__isnull=True)
+            .select_for_update()
+            .count()
+        )
+        if superadmin_count >= max_sa:
+            raise serializers.ValidationError({
+                "role": f"Ya existen {max_sa} SuperAdmins en el sistema. No se pueden crear más."
+            })
+
     def create(self, validated_data):
         password = validated_data.pop("password", None)
-        user = User(**validated_data)
-        if password:
-            # La validación ya se hizo en validate_password()
-            user.set_password(password)
-        else:
-            # Si no hay password, establecer uno temporal (el admin debería forzar cambio)
+        if not password:
             raise serializers.ValidationError({"password": "La contraseña es requerida al crear un usuario."})
-        user.save()
+        new_role = validated_data.get('role', '')
+        with transaction.atomic():
+            # Verificación definitiva con lock: previene race condition donde dos requests
+            # simultáneos crearían ambos un SuperAdmin extra pasando el check por separado.
+            self._check_superadmin_limit_locked(
+                adding_new_superadmin=(new_role == UserRole.SUPER_ADMIN)
+            )
+            user = User(**validated_data)
+            user.set_password(password)
+            user.save()
         return user
 
     def update(self, instance, validated_data):
         password = validated_data.pop("password", None)
+        old_role = instance.role
+        new_role = validated_data.get('role', old_role)
         for attr, value in validated_data.items():
             setattr(instance, attr, value)
         if password:
-            # La validación ya se hizo en validate_password()
             instance.set_password(password)
-        instance.save()
+        with transaction.atomic():
+            self._check_superadmin_limit_locked(
+                adding_new_superadmin=(
+                    new_role == UserRole.SUPER_ADMIN and old_role != UserRole.SUPER_ADMIN
+                )
+            )
+            instance.save()
         return instance
 

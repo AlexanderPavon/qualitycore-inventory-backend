@@ -1,30 +1,20 @@
 # serializers/movement_serializer.py
 from rest_framework import serializers
 from django.core.exceptions import ValidationError as DjangoValidationError
-from django.utils import timezone
 
 from inventory_app.models.movement import Movement
 from inventory_app.models.product import Product
 from inventory_app.services import MovementService
 from inventory_app.constants import MovementType, ValidationMessages
+from inventory_app.validators.business_validators import MovementDateValidator
 
 
 def validate_movement_date(value):
-    """
-    Validación compartida para fecha de movimientos.
-    - No puede ser futura
-    - Solo se permiten movimientos del día actual
-    """
-    now = timezone.now()
-    if value > now:
-        raise serializers.ValidationError(
-            "La fecha del movimiento no puede ser futura."
-        )
-    today_start = now.replace(hour=0, minute=0, second=0, microsecond=0)
-    if value < today_start:
-        raise serializers.ValidationError(
-            "Solo se pueden registrar movimientos del día actual. No se permiten fechas de días anteriores."
-        )
+    """Delega a MovementDateValidator — autoridad centralizada sobre fechas de movimientos."""
+    try:
+        MovementDateValidator.validate(value)
+    except DjangoValidationError as e:
+        raise serializers.ValidationError(str(e.message) if hasattr(e, 'message') else str(e))
     return value
 
 class MovementSerializer(serializers.ModelSerializer):
@@ -34,8 +24,8 @@ class MovementSerializer(serializers.ModelSerializer):
     supplier_name = serializers.CharField(source='product.supplier.name', read_only=True, default="")
     customer_name = serializers.CharField(source='customer.name', read_only=True, default="")
     user_name = serializers.CharField(source='user.name', read_only=True)
-    corrected_by_id = serializers.IntegerField(source='corrected_by.id', read_only=True, default=None)
-    correction_quantity = serializers.IntegerField(source='corrected_by.quantity', read_only=True, default=None)
+    corrected_by_id = serializers.IntegerField(source='correction.id', read_only=True, default=None)
+    correction_quantity = serializers.IntegerField(source='correction.quantity', read_only=True, default=None)
     original_quantity = serializers.SerializerMethodField()
 
     class Meta:
@@ -68,12 +58,14 @@ class MovementSerializer(serializers.ModelSerializer):
     def get_original_quantity(self, obj):
         """
         Para correcciones, retorna la cantidad del movimiento original.
-        El original tiene corrected_by apuntando a esta corrección (relación inversa).
+        El original apunta a esta corrección via `correction` (relación inversa 'corrected_movement').
         """
         if obj.movement_type != MovementType.CORRECTION:
             return None
-        original = obj.correction.first()
-        return original.quantity if original else None
+        try:
+            return obj.corrected_movement.quantity
+        except Movement.DoesNotExist:
+            return None
 
     def validate_date(self, value):
         return validate_movement_date(value)
@@ -106,7 +98,7 @@ class MovementSerializer(serializers.ModelSerializer):
             raise serializers.ValidationError(str(e))
 
 
-class CorrectionSerializer(serializers.Serializer):
+class MovementCorrectionSerializer(serializers.Serializer):
     """
     Serializer para correcciones de movimientos existentes.
     Valida los datos antes de delegarlos al MovementService.
@@ -130,11 +122,11 @@ class CorrectionSerializer(serializers.Serializer):
             return correction
         except DjangoValidationError as e:
             raise serializers.ValidationError(
-                str(e.message) if hasattr(e, 'message') else str(e)
+                e.messages if hasattr(e, 'messages') else str(e)
             )
 
 
-class AdjustmentMovementSerializer(serializers.Serializer):
+class MovementAdjustmentSerializer(serializers.Serializer):
     """
     Serializer dedicado para ajustes de inventario.
     Separado del MovementSerializer para no acoplar el flujo de compra/venta
@@ -173,4 +165,6 @@ class AdjustmentMovementSerializer(serializers.Serializer):
             )
             return movement
         except DjangoValidationError as e:
-            raise serializers.ValidationError(str(e))
+            raise serializers.ValidationError(
+                e.messages if hasattr(e, 'messages') else str(e)
+            )

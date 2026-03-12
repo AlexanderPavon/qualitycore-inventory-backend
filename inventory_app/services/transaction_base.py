@@ -5,20 +5,24 @@ Ambas siguen el mismo patrón: validar → transacción atómica → crear entid
 → crear movimientos → actualizar stock → alertas.
 """
 
+from abc import ABC, abstractmethod
 from django.core.exceptions import ValidationError
+from django.core.cache import cache
 from django.db import transaction
+from django.db.models import F
 from django.utils import timezone
 from decimal import Decimal
 
 from inventory_app.models import Movement, Product, User
 from inventory_app.services.alert_service import AlertService
+from inventory_app.services.dashboard_service import DASHBOARD_CACHE_KEY
 
 import logging
 
 logger = logging.getLogger(__name__)
 
 
-class TransactionServiceBase:
+class TransactionServiceBase(ABC):
     """
     Clase base con la lógica compartida entre SaleService y PurchaseService.
 
@@ -27,8 +31,7 @@ class TransactionServiceBase:
     - _validate_item(product, item, entity): validaciones específicas del item
     - _create_record(entity, user, date, total): crea Sale/Purchase
     - _build_movement_kwargs(product, user, entity, record, ...): kwargs para Movement
-    - _apply_stock_change(product, quantity): +/- stock
-    - movement_type: str - tipo de movimiento ('input'/'output')
+    - _stock_delta(quantity): retorna el delta firmado (+quantity para entradas, -quantity para salidas)
     """
 
     @classmethod
@@ -48,6 +51,17 @@ class TransactionServiceBase:
         transaction_date = timezone.now()
 
         with transaction.atomic():
+            # Bloquear todas las filas de productos de una sola vez antes de validar.
+            # Un único SELECT FOR UPDATE con __in evita deadlocks (la BD ordena por PK
+            # de forma consistente) y elimina el TOCTOU entre la consulta y la escritura.
+            product_ids = [item.get('product') for item in items]
+            locked_products = {
+                p.id: p
+                for p in Product.objects.select_for_update().filter(
+                    id__in=product_ids, deleted_at__isnull=True
+                )
+            }
+
             products_data = []
             total = Decimal('0.00')
 
@@ -55,12 +69,10 @@ class TransactionServiceBase:
                 product_id = item.get('product')
                 quantity = item.get('quantity')
 
-                try:
-                    product = Product.objects.select_for_update().get(
-                        id=product_id, deleted_at__isnull=True
-                    )
-                except Product.DoesNotExist:
+                if product_id not in locked_products:
                     raise ValidationError(f"Producto con ID {product_id} no existe.")
+
+                product = locked_products[product_id]
 
                 # Validaciones específicas (stock para ventas, proveedor para compras)
                 cls._validate_item(product, quantity, entity)
@@ -93,8 +105,10 @@ class TransactionServiceBase:
                 )
                 Movement.objects.create(**movement_kwargs)
 
-                cls._apply_stock_change(product, quantity)
-                product.save()
+                Product.objects.filter(id=product.id).update(
+                    current_stock=F('current_stock') + cls._stock_delta(quantity)
+                )
+                product.refresh_from_db(fields=['current_stock'])
 
                 AlertService.update_stock_alerts(product)
 
@@ -103,24 +117,33 @@ class TransactionServiceBase:
                 f"{len(products_data)} productos. Total: ${total}"
             )
 
+        # Invalidar caché del dashboard para que refleje la nueva transacción
+        # inmediatamente (ventas, movimientos, alertas pueden haber cambiado).
+        cache.delete(DASHBOARD_CACHE_KEY)
+
         return record
 
-    @classmethod
-    def _validate_entity(cls, entity_id):
-        raise NotImplementedError
+    @staticmethod
+    @abstractmethod
+    def _validate_entity(entity_id):
+        """Valida y retorna la entidad (Customer o Supplier)."""
 
-    @classmethod
-    def _validate_item(cls, product, quantity, entity):
-        raise NotImplementedError
+    @staticmethod
+    @abstractmethod
+    def _validate_item(product, quantity, entity):
+        """Validaciones específicas del ítem (stock para ventas, proveedor para compras)."""
 
-    @classmethod
-    def _create_record(cls, entity, user, date, total):
-        raise NotImplementedError
+    @staticmethod
+    @abstractmethod
+    def _create_record(entity, user, date, total):
+        """Crea el registro principal (Sale o Purchase)."""
 
-    @classmethod
-    def _build_movement_kwargs(cls, product, user, entity, record, quantity, stock_before, date):
-        raise NotImplementedError
+    @staticmethod
+    @abstractmethod
+    def _build_movement_kwargs(product, user, entity, record, quantity, stock_before, date):
+        """Retorna los kwargs para crear el Movement asociado."""
 
-    @classmethod
-    def _apply_stock_change(cls, product, quantity):
-        raise NotImplementedError
+    @staticmethod
+    @abstractmethod
+    def _stock_delta(quantity):
+        """Retorna el delta firmado a aplicar a current_stock (+quantity entradas, -quantity salidas)."""

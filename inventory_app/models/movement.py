@@ -11,6 +11,14 @@ class Movement(models.Model):
     # Usar constantes centralizadas
     MOVEMENT_CHOICES = MovementType.CHOICES
 
+    # Flag para que el signal post_save (signals.py) omita el registro automático
+    # en AuditLog. Establecer a True cuando el servicio que crea el movimiento
+    # llama directamente a AuditLog.log_action() con datos más ricos (stock_before,
+    # stock_after, original_movement_id, etc.) que el signal no puede capturar.
+    # Convención: siempre asignarlo antes de .save() — movement._skip_audit = True.
+    # Ver también: campo `correction` (OneToOneField) que apunta al movimiento de corrección.
+    _skip_audit: bool = False
+
     movement_type = models.CharField(max_length=10, choices=MOVEMENT_CHOICES)  # Optimizado con choices
     date = models.DateTimeField(db_index=True)  # Índice para filtrado y ordenamiento por fecha
     quantity = models.IntegerField()  # Validación por tipo en service layer (ajustes permiten negativos)
@@ -22,11 +30,13 @@ class Movement(models.Model):
     sale = models.ForeignKey('Sale', null=True, blank=True, on_delete=models.SET_NULL, related_name="movements")
     purchase = models.ForeignKey('Purchase', null=True, blank=True, on_delete=models.SET_NULL, related_name="movements")
     reason = models.CharField(max_length=500, blank=True, default='')  # Motivo del ajuste/corrección
-    corrected_by = models.ForeignKey(
+    correction = models.OneToOneField(
         'self', null=True, blank=True,
         on_delete=models.SET_NULL,
-        related_name='correction'
-    )  # Si no es null, este movimiento fue corregido y apunta al movimiento de corrección
+        related_name='corrected_movement'
+    )  # Si no es null, este movimiento fue corregido y apunta al movimiento de corrección.
+       # OneToOneField garantiza a nivel DB que ningún movimiento puede ser la corrección de dos originales.
+       # Acceso inverso: correction_movement.corrected_movement → movimiento original.
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
     deleted_at = models.DateTimeField(null=True, blank=True)
@@ -36,6 +46,12 @@ class Movement(models.Model):
     all_objects = models.Manager()  # Acceso a todos los registros
 
     class Meta:
+        indexes = [
+            # Historial de movimientos por producto (más frecuente: listado de movimientos de un producto)
+            models.Index(fields=['product', '-date'], name='movement_product_date_idx'),
+            # Filtrado por tipo de movimiento + orden por fecha (informes, filtros en UI)
+            models.Index(fields=['movement_type', '-date'], name='movement_type_date_idx'),
+        ]
         constraints = [
             # Una salida siempre debe tener cliente
             models.CheckConstraint(

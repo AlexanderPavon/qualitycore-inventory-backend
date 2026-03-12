@@ -68,13 +68,25 @@ class PasswordChangeRateThrottle(UserRateThrottle):
 
 class WriteOperationThrottle(UserRateThrottle):
     """
-    Throttle for write operations (POST, PUT, PATCH, DELETE).
+    Rate scope for write operations (POST, PUT, PATCH, DELETE).
     More restrictive than read operations.
+    Apply via WriteThrottleMixin — not directly via throttle_classes — so that
+    GET requests on the same view are not inadvertently write-throttled.
     """
     scope = 'write'
 
-    def allow_request(self, request, view):
-        # Only throttle write operations
-        if request.method in ['POST', 'PUT', 'PATCH', 'DELETE']:
-            return super().allow_request(request, view)
-        return True
+
+class WriteThrottleMixin:
+    """
+    Applies WriteOperationThrottle only to mutating HTTP methods
+    (POST, PUT, PATCH, DELETE). GET/HEAD/OPTIONS use the global default throttles.
+
+    Separates the *when-to-throttle* decision (here, in the view layer)
+    from the *how-to-throttle* mechanics (WriteOperationThrottle scope/rate).
+    Usage: inherit before the DRF generic view class.
+    """
+    def get_throttles(self):
+        throttles = super().get_throttles()  # type: ignore[misc]
+        if self.request.method in ('POST', 'PUT', 'PATCH', 'DELETE'):
+            throttles = [WriteOperationThrottle()] + throttles
+        return throttles

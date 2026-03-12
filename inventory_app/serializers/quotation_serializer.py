@@ -1,10 +1,12 @@
 # serializers/quotation_serializer.py
+from decimal import Decimal
 from rest_framework import serializers
 from django.core.exceptions import ValidationError as DjangoValidationError
 
 from inventory_app.models.quotation import Quotation
 from inventory_app.serializers.quoted_product_serializer import QuotedProductSerializer
 from inventory_app.services import QuotationService
+from inventory_app.constants import BusinessRules
 from inventory_app.utils.timezone_utils import to_local
 
 
@@ -54,12 +56,15 @@ class QuotationSerializer(serializers.ModelSerializer):
         ]
 
         try:
-            # Delegar creación al servicio (lógica de negocio)
+            # Delegar creación al servicio (lógica de negocio).
+            # tax_rate se pasa explícitamente desde BusinessRules para dejar claro
+            # qué tasa se aplica — en el futuro se puede leer desde AppConfig.
             quotation = QuotationService.create_quotation(
                 customer_id=customer.id,
                 user_id=user.id,
                 products=products_for_service,
-                notes=notes
+                notes=notes,
+                tax_rate=Decimal(str(BusinessRules.TAX_RATE)),
             )
             return quotation
 

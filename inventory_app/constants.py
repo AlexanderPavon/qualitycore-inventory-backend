@@ -102,6 +102,9 @@ class ValidationMessages:
     CORRECTION_SAME_QUANTITY = 'La cantidad correcta no puede ser igual a la original.'
     CORRECTION_INVALID_TYPE = 'Solo se pueden corregir movimientos de entrada o salida.'
     CORRECTION_STOCK_NEGATIVE = 'La corrección dejaría el stock en negativo.'
+    CORRECTION_TOO_OLD = (
+        'No se puede corregir un movimiento con más de {days} días de antigüedad.'
+    )
 
 
 class BusinessRules:
@@ -123,6 +126,7 @@ class BusinessRules:
     # Límites
     MAX_PRODUCT_PRICE = 9999999.99
     MAX_QUANTITY = 99999
+    MAX_CORRECTION_AGE_DAYS = 30
 
     # Paginación
     DEFAULT_PAGE_SIZE = 20
@@ -148,5 +152,5 @@ class ImageConfig:
     MIN_HEIGHT = 300
     MAX_WIDTH = 2000
     MAX_HEIGHT = 2000
-    ALLOWED_TYPES = ['image/jpeg', 'image/png']
-    ALLOWED_EXTENSIONS = ['.jpg', '.jpeg', '.png']
+    ALLOWED_TYPES = ['image/jpeg', 'image/png', 'image/webp']
+    ALLOWED_EXTENSIONS = ['.jpg', '.jpeg', '.png', '.webp']

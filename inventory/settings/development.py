@@ -50,6 +50,28 @@ LOGGING['loggers']['inventory_app']['level'] = 'DEBUG'
 # --- Mostrar emails en consola en vez de enviarlos ---
 EMAIL_BACKEND = 'django.core.mail.backends.console.EmailBackend'
 
+# --- Celery: ejecutar tareas de forma síncrona en desarrollo/tests ---
+# Permite que log_audit_action y otras tareas se ejecuten inmediatamente
+# sin necesidad de un worker Celery corriendo.
+CELERY_TASK_ALWAYS_EAGER = True
+CELERY_TASK_EAGER_PROPAGATES = True  # Propaga excepciones en eager mode (facilita debugging)
+# En Celery 5.x, ALWAYS_EAGER no persiste resultados al result backend por defecto.
+# Sin esto, AsyncResult(task_id).state siempre devuelve PENDING y el frontend hace
+# timeout esperando el PDF. Con STORE_EAGER_RESULT=True los resultados van a Redis
+# igual que en producción, habilitando el flujo de polling normal.
+CELERY_TASK_STORE_EAGER_RESULT = True
+
+# --- Tests: cache en memoria para evitar dependencia de Redis ---
+# El throttling y la idempotencia usan CACHES. Sin Redis corriendo localmente,
+# las pruebas fallan con ConnectionError. Locmem es suficiente para tests.
+import sys  # noqa: E402
+if 'test' in sys.argv:
+    CACHES = {
+        'default': {
+            'BACKEND': 'django.core.cache.backends.locmem.LocMemCache',
+        }
+    }
+
 # --- Django Debug Toolbar (opcional - descomentar si lo usas) ---
 # INSTALLED_APPS += ['debug_toolbar']
 # MIDDLEWARE = ['debug_toolbar.middleware.DebugToolbarMiddleware'] + MIDDLEWARE

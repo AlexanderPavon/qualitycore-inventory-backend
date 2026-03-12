@@ -6,6 +6,7 @@ Cubre: MovementService, SaleService, AlertService, PurchaseService.
 from django.test import TestCase
 from django.core.exceptions import ValidationError as DjangoValidationError
 from django.utils import timezone
+from datetime import timedelta
 from decimal import Decimal
 
 from inventory_app.models import Product, Category, Supplier, Customer, User, Movement, Sale, Purchase
@@ -52,7 +53,7 @@ class ServiceBaseTestCase(TestCase):
             price=Decimal(price),
             current_stock=stock,
             minimum_stock=min_stock,
-            status='Disponible',
+            status='Activo',
             supplier=self.supplier,
         )
 
@@ -64,61 +65,81 @@ class TestMovementService(ServiceBaseTestCase):
     """Tests para el servicio de movimientos de inventario."""
 
     def test_movimiento_entrada_aumenta_stock(self):
-        """Un movimiento de entrada debe aumentar el stock del producto."""
+        """Una compra crea un movimiento de entrada que aumenta el stock del producto."""
         product = self.create_product(stock=10)
-        MovementService.create_movement(
-            movement_type='input',
-            product_id=product.id,
-            quantity=5,
+        PurchaseService.create(
+            entity_id=self.supplier.id,
             user_id=self.user.id,
+            items=[{'product': product.id, 'quantity': 5}],
         )
         product.refresh_from_db()
         self.assertEqual(product.current_stock, 15)
 
     def test_movimiento_salida_disminuye_stock(self):
-        """Un movimiento de salida debe disminuir el stock del producto."""
+        """Una venta crea un movimiento de salida que disminuye el stock del producto."""
         product = self.create_product(stock=20)
-        MovementService.create_movement(
-            movement_type='output',
-            product_id=product.id,
-            quantity=8,
+        SaleService.create(
+            entity_id=self.customer.id,
             user_id=self.user.id,
-            customer_id=self.customer.id,
+            items=[{'product': product.id, 'quantity': 8}],
         )
         product.refresh_from_db()
         self.assertEqual(product.current_stock, 12)
 
     def test_movimiento_salida_sin_stock_falla(self):
-        """Un movimiento de salida sin stock suficiente debe fallar."""
+        """Una venta con stock insuficiente debe fallar con ValidationError."""
         product = self.create_product(stock=3)
         with self.assertRaises(DjangoValidationError):
-            MovementService.create_movement(
-                movement_type='output',
-                product_id=product.id,
-                quantity=10,
+            SaleService.create(
+                entity_id=self.customer.id,
                 user_id=self.user.id,
-                customer_id=self.customer.id,
+                items=[{'product': product.id, 'quantity': 10}],
             )
 
     def test_movimiento_producto_inexistente_falla(self):
-        """Un movimiento con producto inexistente debe fallar."""
+        """Un ajuste con producto inexistente debe fallar."""
         with self.assertRaises(DjangoValidationError):
             MovementService.create_movement(
-                movement_type='input',
+                movement_type='adjustment',
                 product_id=99999,
                 quantity=5,
                 user_id=self.user.id,
+                reason='Test producto inexistente',
             )
 
-    def test_movimiento_crea_registro(self):
-        """Un movimiento debe crear un registro en la tabla Movement."""
+    def test_create_movement_input_rechazado(self):
+        """create_movement('input') debe lanzar ValidationError — usar PurchaseService."""
         product = self.create_product(stock=10)
-        movement = MovementService.create_movement(
-            movement_type='input',
-            product_id=product.id,
-            quantity=5,
+        with self.assertRaises(DjangoValidationError) as ctx:
+            MovementService.create_movement(
+                movement_type='input',
+                product_id=product.id,
+                quantity=5,
+                user_id=self.user.id,
+            )
+        self.assertIn('PurchaseService', str(ctx.exception))
+
+    def test_create_movement_output_rechazado(self):
+        """create_movement('output') debe lanzar ValidationError — usar SaleService."""
+        product = self.create_product(stock=10)
+        with self.assertRaises(DjangoValidationError) as ctx:
+            MovementService.create_movement(
+                movement_type='output',
+                product_id=product.id,
+                quantity=5,
+                user_id=self.user.id,
+            )
+        self.assertIn('SaleService', str(ctx.exception))
+
+    def test_movimiento_crea_registro(self):
+        """Una compra debe crear un registro Movement de tipo input en la tabla."""
+        product = self.create_product(stock=10)
+        PurchaseService.create(
+            entity_id=self.supplier.id,
             user_id=self.user.id,
+            items=[{'product': product.id, 'quantity': 5}],
         )
+        movement = Movement.objects.filter(product=product, movement_type='input').first()
         self.assertIsNotNone(movement)
         self.assertEqual(movement.quantity, 5)
         self.assertEqual(movement.movement_type, 'input')
@@ -135,8 +156,8 @@ class TestSaleService(ServiceBaseTestCase):
         product1 = self.create_product(name='Producto 1', stock=20, price='100.00')
         product2 = self.create_product(name='Producto 2', stock=15, price='50.00')
 
-        sale = SaleService.create_sale(
-            customer_id=self.customer.id,
+        sale = SaleService.create(
+            entity_id=self.customer.id,
             user_id=self.user.id,
             items=[
                 {'product': product1.id, 'quantity': 2},
@@ -152,8 +173,8 @@ class TestSaleService(ServiceBaseTestCase):
         """La venta debe descontar el stock de los productos."""
         product = self.create_product(stock=30, price='10.00')
 
-        SaleService.create_sale(
-            customer_id=self.customer.id,
+        SaleService.create(
+            entity_id=self.customer.id,
             user_id=self.user.id,
             items=[{'product': product.id, 'quantity': 5}]
         )
@@ -164,8 +185,8 @@ class TestSaleService(ServiceBaseTestCase):
     def test_venta_sin_items_falla(self):
         """Una venta sin productos debe fallar."""
         with self.assertRaises(DjangoValidationError):
-            SaleService.create_sale(
-                customer_id=self.customer.id,
+            SaleService.create(
+                entity_id=self.customer.id,
                 user_id=self.user.id,
                 items=[]
             )
@@ -175,8 +196,8 @@ class TestSaleService(ServiceBaseTestCase):
         product = self.create_product(stock=3, price='10.00')
 
         with self.assertRaises(DjangoValidationError):
-            SaleService.create_sale(
-                customer_id=self.customer.id,
+            SaleService.create(
+                entity_id=self.customer.id,
                 user_id=self.user.id,
                 items=[{'product': product.id, 'quantity': 10}]
             )
@@ -189,8 +210,8 @@ class TestSaleService(ServiceBaseTestCase):
         """Una venta con cliente inexistente debe fallar."""
         product = self.create_product(stock=10)
         with self.assertRaises(DjangoValidationError):
-            SaleService.create_sale(
-                customer_id=99999,
+            SaleService.create(
+                entity_id=99999,
                 user_id=self.user.id,
                 items=[{'product': product.id, 'quantity': 1}]
             )
@@ -199,8 +220,8 @@ class TestSaleService(ServiceBaseTestCase):
         """Una venta con usuario inexistente debe fallar."""
         product = self.create_product(stock=10)
         with self.assertRaises(DjangoValidationError):
-            SaleService.create_sale(
-                customer_id=self.customer.id,
+            SaleService.create(
+                entity_id=self.customer.id,
                 user_id=99999,
                 items=[{'product': product.id, 'quantity': 1}]
             )
@@ -208,8 +229,8 @@ class TestSaleService(ServiceBaseTestCase):
     def test_venta_producto_inexistente_falla(self):
         """Una venta con producto inexistente debe fallar."""
         with self.assertRaises(DjangoValidationError):
-            SaleService.create_sale(
-                customer_id=self.customer.id,
+            SaleService.create(
+                entity_id=self.customer.id,
                 user_id=self.user.id,
                 items=[{'product': 99999, 'quantity': 1}]
             )
@@ -218,8 +239,8 @@ class TestSaleService(ServiceBaseTestCase):
         """Una venta con cantidad 0 debe fallar."""
         product = self.create_product(stock=10)
         with self.assertRaises(DjangoValidationError):
-            SaleService.create_sale(
-                customer_id=self.customer.id,
+            SaleService.create(
+                entity_id=self.customer.id,
                 user_id=self.user.id,
                 items=[{'product': product.id, 'quantity': 0}]
             )
@@ -333,8 +354,8 @@ class TestPurchaseService(ServiceBaseTestCase):
         product1 = self.create_product_for_supplier(self.supplier, name='Producto A', price='100.00')
         product2 = self.create_product_for_supplier(self.supplier, name='Producto B', price='50.00')
 
-        purchase = PurchaseService.create_purchase(
-            supplier_id=self.supplier.id,
+        purchase = PurchaseService.create(
+            entity_id=self.supplier.id,
             user_id=self.user.id,
             items=[
                 {'product': product1.id, 'quantity': 3},
@@ -349,8 +370,8 @@ class TestPurchaseService(ServiceBaseTestCase):
         """La compra debe aumentar el stock de los productos."""
         product = self.create_product_for_supplier(self.supplier, stock=10, price='10.00')
 
-        PurchaseService.create_purchase(
-            supplier_id=self.supplier.id,
+        PurchaseService.create(
+            entity_id=self.supplier.id,
             user_id=self.user.id,
             items=[{'product': product.id, 'quantity': 5}]
         )
@@ -362,8 +383,8 @@ class TestPurchaseService(ServiceBaseTestCase):
         """La compra debe crear movimientos de entrada."""
         product = self.create_product_for_supplier(self.supplier, stock=10)
 
-        purchase = PurchaseService.create_purchase(
-            supplier_id=self.supplier.id,
+        purchase = PurchaseService.create(
+            entity_id=self.supplier.id,
             user_id=self.user.id,
             items=[{'product': product.id, 'quantity': 5}]
         )
@@ -378,8 +399,8 @@ class TestPurchaseService(ServiceBaseTestCase):
         product_supplier2 = self.create_product_for_supplier(self.supplier2, name='Producto Ajeno')
 
         with self.assertRaises(DjangoValidationError) as ctx:
-            PurchaseService.create_purchase(
-                supplier_id=self.supplier.id,
+            PurchaseService.create(
+                entity_id=self.supplier.id,
                 user_id=self.user.id,
                 items=[{'product': product_supplier2.id, 'quantity': 1}]
             )
@@ -390,8 +411,8 @@ class TestPurchaseService(ServiceBaseTestCase):
         """Una compra con proveedor inexistente debe fallar."""
         product = self.create_product_for_supplier(self.supplier)
         with self.assertRaises(DjangoValidationError):
-            PurchaseService.create_purchase(
-                supplier_id=99999,
+            PurchaseService.create(
+                entity_id=99999,
                 user_id=self.user.id,
                 items=[{'product': product.id, 'quantity': 1}]
             )
@@ -400,8 +421,8 @@ class TestPurchaseService(ServiceBaseTestCase):
         """Una compra con usuario inexistente debe fallar."""
         product = self.create_product_for_supplier(self.supplier)
         with self.assertRaises(DjangoValidationError):
-            PurchaseService.create_purchase(
-                supplier_id=self.supplier.id,
+            PurchaseService.create(
+                entity_id=self.supplier.id,
                 user_id=99999,
                 items=[{'product': product.id, 'quantity': 1}]
             )
@@ -409,8 +430,183 @@ class TestPurchaseService(ServiceBaseTestCase):
     def test_compra_producto_inexistente_falla(self):
         """Una compra con producto inexistente debe fallar."""
         with self.assertRaises(DjangoValidationError):
-            PurchaseService.create_purchase(
-                supplier_id=self.supplier.id,
+            PurchaseService.create(
+                entity_id=self.supplier.id,
                 user_id=self.user.id,
                 items=[{'product': 99999, 'quantity': 1}]
             )
+
+
+# =============================================================================
+# Tests de MovementService.create_correction
+# =============================================================================
+class TestMovementServiceCorrection(ServiceBaseTestCase):
+    """
+    Tests para create_correction en MovementService.
+    Cubre: ajuste de stock, validaciones de negocio y marcado del original.
+    """
+
+    def _make_input(self, product, quantity=5, days_ago=0):
+        """Crea un movimiento de entrada via PurchaseService (cumple constraint input_requires_purchase)."""
+        purchase = PurchaseService.create(
+            entity_id=self.supplier.id,
+            user_id=self.user.id,
+            items=[{'product': product.id, 'quantity': quantity}],
+        )
+        movement = Movement.objects.filter(purchase=purchase, movement_type='input').first()
+        if days_ago > 0:
+            movement.date = timezone.now() - timedelta(days=days_ago)
+            movement.save(update_fields=['date'])
+        return movement
+
+    def _make_output(self, product, quantity=5, days_ago=0):
+        """Crea un movimiento de salida via SaleService (cumple constraint output_requires_sale)."""
+        sale = SaleService.create(
+            entity_id=self.customer.id,
+            user_id=self.user.id,
+            items=[{'product': product.id, 'quantity': quantity}],
+        )
+        movement = Movement.objects.filter(sale=sale, movement_type='output').first()
+        if days_ago > 0:
+            movement.date = timezone.now() - timedelta(days=days_ago)
+            movement.save(update_fields=['date'])
+        return movement
+
+    def test_correccion_input_ajusta_stock_correcto(self):
+        """INPUT qty=5 → stock +5. Corregir a qty=3 → diff -2 → stock final -2."""
+        product = self.create_product(stock=10)
+        movement = self._make_input(product, quantity=5)
+        product.refresh_from_db()
+        self.assertEqual(product.current_stock, 15)
+
+        MovementService.create_correction(
+            original_movement_id=movement.id,
+            new_quantity=3,
+            reason='Ajuste de entrada errada',
+            user_id=self.user.id,
+        )
+
+        product.refresh_from_db()
+        self.assertEqual(product.current_stock, 13)  # 15 + (3-5) = 13
+
+    def test_correccion_output_ajusta_stock_correcto(self):
+        """OUTPUT qty=8 → stock -8. Corregir a qty=3 → diff +5 → stock sube."""
+        product = self.create_product(stock=20)
+        movement = self._make_output(product, quantity=8)
+        product.refresh_from_db()
+        self.assertEqual(product.current_stock, 12)
+
+        MovementService.create_correction(
+            original_movement_id=movement.id,
+            new_quantity=3,
+            reason='Salida excesiva corregida',
+            user_id=self.user.id,
+        )
+
+        product.refresh_from_db()
+        self.assertEqual(product.current_stock, 17)  # 12 + (8-3) = 17
+
+    def test_correccion_marca_original_como_corregido(self):
+        """El movimiento original debe quedar con correction apuntando a la corrección."""
+        product = self.create_product(stock=20)
+        movement = self._make_input(product, quantity=5)
+
+        correction = MovementService.create_correction(
+            original_movement_id=movement.id,
+            new_quantity=2,
+            reason='Verificación campo correction',
+            user_id=self.user.id,
+        )
+
+        movement.refresh_from_db()
+        self.assertIsNotNone(movement.correction_id)
+        self.assertEqual(movement.correction_id, correction.id)
+
+    def test_correccion_movimiento_ya_corregido_falla(self):
+        """Intentar corregir dos veces el mismo movimiento debe fallar."""
+        product = self.create_product(stock=20)
+        movement = self._make_input(product, quantity=5)
+
+        MovementService.create_correction(
+            original_movement_id=movement.id,
+            new_quantity=3,
+            reason='Primera corrección',
+            user_id=self.user.id,
+        )
+
+        with self.assertRaises(DjangoValidationError) as ctx:
+            MovementService.create_correction(
+                original_movement_id=movement.id,
+                new_quantity=2,
+                reason='Segunda corrección',
+                user_id=self.user.id,
+            )
+        self.assertIn('ya fue corregido', str(ctx.exception))
+
+    def test_correccion_movimiento_antiguo_falla(self):
+        """Movimiento de más de 30 días no puede corregirse."""
+        product = self.create_product(stock=20)
+        movement = self._make_input(product, quantity=5, days_ago=31)
+
+        with self.assertRaises(DjangoValidationError) as ctx:
+            MovementService.create_correction(
+                original_movement_id=movement.id,
+                new_quantity=3,
+                reason='Corrección tardía',
+                user_id=self.user.id,
+            )
+        self.assertIn('días de antigüedad', str(ctx.exception))
+
+    def test_correccion_ajuste_no_permitido(self):
+        """Solo INPUT y OUTPUT pueden corregirse; ADJUSTMENT debe fallar."""
+        product = self.create_product(stock=20)
+        adjustment = MovementService.create_movement(
+            movement_type='adjustment',
+            product_id=product.id,
+            quantity=5,
+            user_id=self.user.id,
+            reason='Ajuste manual',
+        )
+
+        with self.assertRaises(DjangoValidationError) as ctx:
+            MovementService.create_correction(
+                original_movement_id=adjustment.id,
+                new_quantity=3,
+                reason='Intento inválido',
+                user_id=self.user.id,
+            )
+        self.assertIn('Solo se pueden corregir', str(ctx.exception))
+
+    def test_correccion_misma_cantidad_falla(self):
+        """La cantidad corregida no puede ser igual a la original."""
+        product = self.create_product(stock=20)
+        movement = self._make_input(product, quantity=5)
+
+        with self.assertRaises(DjangoValidationError) as ctx:
+            MovementService.create_correction(
+                original_movement_id=movement.id,
+                new_quantity=5,
+                reason='Igual a original',
+                user_id=self.user.id,
+            )
+        self.assertIn('igual a la original', str(ctx.exception))
+
+    def test_correccion_stock_negativo_falla(self):
+        """Una corrección que dejaría stock negativo debe fallar con rollback."""
+        product = self.create_product(stock=5)
+        movement = self._make_output(product, quantity=5)
+        product.refresh_from_db()
+        self.assertEqual(product.current_stock, 0)
+
+        # Corregir a qty=10: diff = 5-10 = -5 → stock -5 → inválido
+        with self.assertRaises(DjangoValidationError) as ctx:
+            MovementService.create_correction(
+                original_movement_id=movement.id,
+                new_quantity=10,
+                reason='Corrección que deja negativo',
+                user_id=self.user.id,
+            )
+        self.assertIn('negativo', str(ctx.exception))
+        # Stock no cambia (atomicidad)
+        product.refresh_from_db()
+        self.assertEqual(product.current_stock, 0)

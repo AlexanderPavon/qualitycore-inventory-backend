@@ -5,10 +5,12 @@ Evita duplicación de código y garantiza consistencia en tipos de alertas.
 """
 
 import logging
+from django.core.cache import cache
 from django.utils import timezone
 from inventory_app.models.alert import Alert
 from inventory_app.models.product import Product
 from inventory_app.constants import AlertType
+from inventory_app.services.dashboard_service import DASHBOARD_CACHE_KEY
 
 logger = logging.getLogger(__name__)
 
@@ -42,6 +44,7 @@ class AlertService:
             )
             if deleted_count > 0:
                 logger.debug(f"Eliminadas {deleted_count} alertas de {product.name} (stock OK)")
+                cache.delete(DASHBOARD_CACHE_KEY)
             return
 
         # Determinar el tipo de alerta y mensaje según el nivel de stock
@@ -58,24 +61,20 @@ class AlertService:
                 f"({product.minimum_stock}). Stock actual: {product.current_stock}"
             )
 
-        # Verificar si ya existe una alerta activa del mismo tipo
-        existing_alert = product.alerts.filter(
-            deleted_at__isnull=True,
+        # Soft-delete alertas de otro tipo (no-op si ya es el tipo correcto)
+        product.alerts.filter(deleted_at__isnull=True).exclude(
             type=alert_type
-        ).exists()
+        ).update(deleted_at=timezone.now())
 
-        if not existing_alert:
-            # Eliminar alertas anteriores de otros tipos (para cambiar de tipo si es necesario)
-            product.alerts.filter(deleted_at__isnull=True).exclude(
-                type=alert_type
-            ).update(deleted_at=timezone.now())
-
-            # Crear la nueva alerta
-            Alert.objects.create(
-                product=product,
-                type=alert_type,
-                message=message
-            )
+        # Crear alerta solo si no existe ya una activa del mismo tipo
+        _, created = Alert.objects.get_or_create(
+            product=product,
+            type=alert_type,
+            deleted_at=None,
+            defaults={'message': message},
+        )
+        if created:
             logger.info(f"Alerta creada: {alert_type} para producto '{product.name}' (stock: {product.current_stock})")
+            cache.delete(DASHBOARD_CACHE_KEY)
         else:
             logger.debug(f"Alerta {alert_type} ya existe para {product.name}")

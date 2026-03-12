@@ -2,37 +2,20 @@
 from rest_framework.views import APIView
 from rest_framework.response import Response
 from rest_framework.permissions import IsAuthenticated
-from django.utils.decorators import method_decorator
-from django.views.decorators.cache import cache_page
-from inventory_app.models import Product, Customer, Movement, Quotation
-from inventory_app.models.alert import Alert
-from django.db.models import Count, Sum, Q
+from django.core.cache import cache
+from inventory_app.services import DashboardService
+from inventory_app.services.dashboard_service import DASHBOARD_CACHE_KEY, DASHBOARD_CACHE_TTL
 
 
 class DashboardSummaryView(APIView):
     permission_classes = [IsAuthenticated]
 
-    @method_decorator(cache_page(60))  # Caché de 60 segundos
     def get(self, request):
-        total_products = Product.objects.filter(deleted_at__isnull=True).count()
-        total_customers = Customer.objects.filter(deleted_at__isnull=True).count()
-        movement_stats = Movement.objects.filter(deleted_at__isnull=True).aggregate(
-            total=Count('id'),
-            entries=Count('id', filter=Q(movement_type='input')),
-            exits=Count('id', filter=Q(movement_type='output')),
-            total_sales=Sum('quantity', filter=Q(movement_type='output'))
-        )
-
-        low_stock_alerts = Alert.objects.filter(deleted_at__isnull=True).count()
-
-        data = {
-            "total_products": total_products,
-            "total_customers": total_customers,
-            "total_movements": movement_stats['total'],
-            "total_entries": movement_stats['entries'],
-            "total_exits": movement_stats['exits'],
-            "low_stock_alerts": low_stock_alerts,
-            "total_sales": movement_stats['total_sales'] or 0
-        }
-
+        # cache_page(60) cachea por URL + headers de sesión (una entrada por usuario).
+        # Con una clave explícita compartimos la misma entrada para todos los usuarios,
+        # reduciendo queries y espacio en caché.
+        data = cache.get(DASHBOARD_CACHE_KEY)
+        if data is None:
+            data = DashboardService.get_summary()
+            cache.set(DASHBOARD_CACHE_KEY, data, DASHBOARD_CACHE_TTL)
         return Response(data)

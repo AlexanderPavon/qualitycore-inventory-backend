@@ -259,6 +259,15 @@ class TestPriceValidator(TestCase):
         with self.assertRaises(ValidationError):
             PriceValidator.validate(Decimal('-1.00'))
 
+    def test_precio_limite_maximo(self):
+        """Precio en el límite máximo debe ser válido."""
+        PriceValidator.validate(Decimal('9999999.99'))
+
+    def test_precio_sobre_limite_maximo(self):
+        """Precio sobre el límite máximo debe fallar."""
+        with self.assertRaises(ValidationError):
+            PriceValidator.validate(Decimal('10000000.00'))
+
 
 # =============================================================================
 # Tests de Cantidad
@@ -266,30 +275,22 @@ class TestPriceValidator(TestCase):
 class TestQuantityValidator(TestCase):
     """Tests para validación de cantidades."""
 
-    def test_cantidad_positiva(self):
-        """Cantidad positiva debe ser válida."""
-        QuantityValidator.validate_positive(5)
+    def test_cantidad_valida(self):
+        """Cantidad >= 1 debe ser válida."""
+        QuantityValidator.validate_min_one(1)
+        QuantityValidator.validate_min_one(5)
 
     def test_cantidad_cero(self):
         """Cantidad cero debe fallar."""
         with self.assertRaises(ValidationError):
-            QuantityValidator.validate_positive(0)
+            QuantityValidator.validate_min_one(0)
 
     def test_cantidad_negativa(self):
         """Cantidad negativa debe fallar."""
         with self.assertRaises(ValidationError):
-            QuantityValidator.validate_positive(-1)
+            QuantityValidator.validate_min_one(-1)
 
     def test_cantidad_none(self):
         """Cantidad None debe fallar."""
         with self.assertRaises(ValidationError):
-            QuantityValidator.validate_positive(None)
-
-    def test_cantidad_minimo_uno_valida(self):
-        """Cantidad 1 debe ser válida con validate_min_one."""
-        QuantityValidator.validate_min_one(1)
-
-    def test_cantidad_minimo_uno_cero(self):
-        """Cantidad 0 debe fallar con validate_min_one."""
-        with self.assertRaises(ValidationError):
-            QuantityValidator.validate_min_one(0)
+            QuantityValidator.validate_min_one(None)
